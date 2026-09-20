@@ -42,8 +42,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Upcoming
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -787,6 +785,45 @@ private fun formatStartDate(raw: String?): String {
 }
 
 @Composable
+private fun TvDialogButton(
+    enabled: Boolean = true,
+    destructive: Boolean = false,
+    onClick: () -> Unit,
+    content: @Composable RowScope.() -> Unit
+) {
+    var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(10.dp)
+
+    val background = when {
+        !enabled -> Color.White.copy(alpha = 0.08f)
+        focused -> Color.White
+        destructive -> Color(0xFF8A3038)
+        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.42f)
+    }
+
+    val foreground = when {
+        !enabled -> Color.White.copy(alpha = 0.35f)
+        focused -> Color.Black
+        else -> Color.White
+    }
+
+    CompositionLocalProvider(LocalContentColor provides foreground) {
+        Row(
+            modifier = Modifier
+                .clip(shape)
+                .background(background)
+                .onFocusChanged { focused = it.isFocused }
+                .clickable(enabled = enabled, onClick = onClick)
+                .focusable(enabled = enabled)
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            content = content
+        )
+    }
+}
+
+@Composable
 private fun AnimeDetailDialog(
     item: AnimeItem,
     isWatchlisted: Boolean,
@@ -862,26 +899,33 @@ private fun AnimeDetailDialog(
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = onOpenNuvio) {
-                    Icon(Icons.Default.Movie, contentDescription = null)
+                TvDialogButton(onClick = onOpenNuvio) {
+                    Icon(Icons.Default.Movie, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(7.dp))
-                    Text("Open in Nuvio")
+                    Text("Open in Nuvio", fontWeight = FontWeight.SemiBold)
                 }
-                Button(
-                    onClick = onToggleWatchlist,
+                TvDialogButton(
                     enabled = !busy,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isWatchlisted) Color(0xFF7A3030) else MaterialTheme.colorScheme.primary
-                    )
+                    destructive = isWatchlisted,
+                    onClick = onToggleWatchlist
                 ) {
-                    Icon(if (isWatchlisted) Icons.Default.Check else Icons.Default.Add, contentDescription = null)
+                    Icon(
+                        if (isWatchlisted) Icons.Default.Check else Icons.Default.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
                     Spacer(Modifier.width(7.dp))
-                    Text(if (isWatchlisted) "Remove" else "Add to Watching")
+                    Text(
+                        if (isWatchlisted) "Remove" else "Add to Watching",
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         },
         dismissButton = {
-            Button(onClick = onDismiss) { Text("Close") }
+            TvDialogButton(onClick = onDismiss) {
+                Text("Close", fontWeight = FontWeight.SemiBold)
+            }
         }
     )
 }
@@ -918,11 +962,11 @@ private fun ConnectionDialog(
             }
         },
         confirmButton = {
-            Button(
+            TvDialogButton(
                 enabled = baseUrl.isNotBlank() && token.isNotBlank(),
                 onClick = { onSave(baseUrl, token) }
             ) {
-                Text("Connect")
+                Text("Connect", fontWeight = FontWeight.SemiBold)
             }
         }
     )
@@ -948,29 +992,32 @@ private fun AnimeActionsDialog(
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(
+                TvDialogButton(
                     onClick = {
                         onOpenNuvio()
                         onDismiss()
                     }
                 ) {
-                    Icon(Icons.Default.Movie, contentDescription = null)
+                    Icon(Icons.Default.Movie, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(7.dp))
-                    Text("Open in Nuvio")
+                    Text("Open in Nuvio", fontWeight = FontWeight.SemiBold)
                 }
-                Button(
-                    onClick = onToggleWatchlist,
+                TvDialogButton(
                     enabled = !busy,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isWatchlisted) Color(0xFF7A3030) else MaterialTheme.colorScheme.primary
-                    )
+                    destructive = isWatchlisted,
+                    onClick = onToggleWatchlist
                 ) {
-                    Text(if (isWatchlisted) "Remove from Watching" else "Add to Watching")
+                    Text(
+                        if (isWatchlisted) "Remove from Watching" else "Add to Watching",
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         },
         dismissButton = {
-            Button(onClick = onDismiss) { Text("Cancel") }
+            TvDialogButton(onClick = onDismiss) {
+                Text("Cancel", fontWeight = FontWeight.SemiBold)
+            }
         }
     )
 }

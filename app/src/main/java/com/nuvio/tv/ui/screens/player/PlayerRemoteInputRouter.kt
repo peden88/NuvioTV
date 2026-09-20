@@ -36,7 +36,8 @@ internal class PlayerRemoteInputRouter {
         mode: PlayerRemoteInputMode,
         canceled: Boolean = false,
         eventTimeMs: Long = -1L,
-        allowDpadSeek: Boolean = false
+        allowDpadSeek: Boolean = false,
+        baseSeekStepMs: Long = PlayerScrubRates.STEP_SHORT_MS
     ): PlayerRemoteInputResult {
         if (action == KeyEvent.ACTION_UP) {
             return release(keyCode, canceled, eventTimeMs)
@@ -63,7 +64,8 @@ internal class PlayerRemoteInputRouter {
             actions += PlayerRemoteAction.PreviewSeek(
                 PlayerScrubRates.deltaMsForHold(
                     holdDurationMs = holdDurationMs.coerceAtLeast(0L),
-                    forward = seekDirection
+                    forward = seekDirection,
+                    baseStepMs = baseSeekStepMs
                 )
             )
             return PlayerRemoteInputResult(consumed = true, actions = actions)

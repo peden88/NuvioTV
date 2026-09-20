@@ -500,6 +500,20 @@ fun LayoutSettingsContent(
                         onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
                     )
 
+                    CompactToggleRow(
+                        title = "Auto-scroll descriptions",
+                        subtitle = "Scroll long Modern Home and episode descriptions while the item is active",
+                        checked = uiState.autoScrollDescriptionsEnabled,
+                        onToggle = {
+                            viewModel.onEvent(
+                                LayoutSettingsEvent.SetAutoScrollDescriptionsEnabled(
+                                    !uiState.autoScrollDescriptionsEnabled
+                                )
+                            )
+                        },
+                        onFocused = { focusedSection = LayoutSettingsSection.DETAIL_PAGE }
+                    )
+
                     if (AppFeaturePolicy.inAppTrailerPlaybackEnabled) {
                         CompactToggleRow(
                             title = stringResource(R.string.audio_autoplay_trailers),

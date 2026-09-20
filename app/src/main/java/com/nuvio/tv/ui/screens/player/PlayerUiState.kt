@@ -93,6 +93,7 @@ data class PlayerUiState(
     val loadingIssueElapsedMs: Long = 0L,
     val pauseOverlayEnabled: Boolean = false,
     val osdClockEnabled: Boolean = true,
+    val seekIntervalSeconds: Int = 10,
     val showPauseOverlay: Boolean = false,
     val audioTracks: List<TrackInfo> = emptyList(),
     val subtitleTracks: List<TrackInfo> = emptyList(),

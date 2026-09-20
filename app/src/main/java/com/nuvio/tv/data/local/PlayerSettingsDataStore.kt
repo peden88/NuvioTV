@@ -275,6 +275,7 @@ data class PlayerSettings(
     val playbackIssueReportsEnabled: Boolean = false,
     val pauseOverlayEnabled: Boolean = false,
     val osdClockEnabled: Boolean = true,
+    val seekIntervalSeconds: Int = DEFAULT_SEEK_INTERVAL_SECONDS,
     val skipIntroEnabled: Boolean = true,
     val parentalGuideEnabled: Boolean = true,
     val autoSkipSegmentTypes: Set<AutoSkipSegmentType> = emptySet(),
@@ -396,6 +397,10 @@ data class PlayerSettings(
         get() = tunnelingEnabled && isTunnelingCompatible
 
     companion object {
+        const val DEFAULT_SEEK_INTERVAL_SECONDS = 10
+        const val MIN_SEEK_INTERVAL_SECONDS = 10
+        const val MAX_SEEK_INTERVAL_SECONDS = 30
+
         const val DEFAULT_STILL_WATCHING_EPISODE_THRESHOLD = 3
         const val MIN_STILL_WATCHING_EPISODE_THRESHOLD = 2
         const val MAX_STILL_WATCHING_EPISODE_THRESHOLD = 6
@@ -655,6 +660,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val playbackIssueReportsEnabledKey = booleanPreferencesKey("playback_issue_reports_enabled")
     private val pauseOverlayEnabledKey = booleanPreferencesKey("pause_overlay_enabled")
     private val osdClockEnabledKey = booleanPreferencesKey("osd_clock_enabled")
+    private val seekIntervalSecondsKey = intPreferencesKey("seek_interval_seconds")
     private val skipIntroEnabledKey = booleanPreferencesKey("skip_intro_enabled")
     private val parentalGuideEnabledKey = booleanPreferencesKey("parental_guide_enabled")
     private val autoSkipSegmentTypesKey = stringSetPreferencesKey("auto_skip_segment_types")
@@ -1039,6 +1045,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 playbackIssueReportsEnabled = prefs[playbackIssueReportsEnabledKey] ?: false,
                 pauseOverlayEnabled = prefs[pauseOverlayEnabledKey] ?: false,
                 osdClockEnabled = prefs[osdClockEnabledKey] ?: true,
+                seekIntervalSeconds = (prefs[seekIntervalSecondsKey] ?: PlayerSettings.DEFAULT_SEEK_INTERVAL_SECONDS)
+                    .coerceIn(PlayerSettings.MIN_SEEK_INTERVAL_SECONDS, PlayerSettings.MAX_SEEK_INTERVAL_SECONDS),
                 skipIntroEnabled = prefs[skipIntroEnabledKey] ?: true,
                 parentalGuideEnabled = prefs[parentalGuideEnabledKey] ?: true,
                 autoSkipSegmentTypes = prefs[autoSkipSegmentTypesKey]
@@ -1398,6 +1406,19 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setOsdClockEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[osdClockEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setSeekIntervalSeconds(seconds: Int) {
+        val normalized = ((seconds.coerceIn(
+            PlayerSettings.MIN_SEEK_INTERVAL_SECONDS,
+            PlayerSettings.MAX_SEEK_INTERVAL_SECONDS
+        ) + 2) / 5) * 5
+        store().edit { prefs ->
+            prefs[seekIntervalSecondsKey] = normalized.coerceIn(
+                PlayerSettings.MIN_SEEK_INTERVAL_SECONDS,
+                PlayerSettings.MAX_SEEK_INTERVAL_SECONDS
+            )
         }
     }
 

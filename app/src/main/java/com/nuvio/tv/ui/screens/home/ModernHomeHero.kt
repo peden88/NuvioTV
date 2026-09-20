@@ -62,6 +62,7 @@ import coil3.request.transitionFactory
 import com.nuvio.tv.R
 import kotlinx.coroutines.delay
 import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
+import com.nuvio.tv.ui.components.AutoScrollOverflowText
 import com.nuvio.tv.ui.components.TrailerPlayer
 import androidx.compose.ui.res.stringResource
 
@@ -686,12 +687,12 @@ private fun HeroTitleContent(
         }
 
         preview.description?.takeIf { it.isNotBlank() }?.let { description ->
-            Text(
+            AutoScrollOverflowText(
                 text = description,
                 style = scaledDescriptionStyle,
                 color = NuvioTheme.colors.TextPrimary,
                 maxLines = descriptionMaxLines,
-                overflow = TextOverflow.Ellipsis,
+                active = !trailerPlayingValue,
                 modifier = Modifier.graphicsLayer { alpha = metaAlpha }
             )
         }

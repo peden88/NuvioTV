@@ -134,6 +134,12 @@ val releaseKeyPasswordValue = env("NUVIO_RELEASE_KEY_PASSWORD")
 val releaseStorePasswordValue = env("NUVIO_RELEASE_STORE_PASSWORD")
     ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD", "815787")
 
+val prefetchTestStoreFilePath = env("PREFETCH_TEST_STORE_FILE")
+val prefetchTestKeyAliasValue = env("PREFETCH_TEST_KEY_ALIAS") ?: "androiddebugkey"
+val prefetchTestKeyPasswordValue = env("PREFETCH_TEST_KEY_PASSWORD") ?: "android"
+val prefetchTestStorePasswordValue = env("PREFETCH_TEST_STORE_PASSWORD") ?: "android"
+val usePrefetchTestSigning = !prefetchTestStoreFilePath.isNullOrBlank()
+
 android {
     namespace = "com.nuvio.tv"
     compileSdk = 36
@@ -142,11 +148,11 @@ android {
     ndkVersion = "27.0.12077973"
 
     defaultConfig {
-        applicationId = "com.nuvio.tv.test"
+        applicationId = "com.nuvio.tv.prefetch4k"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1361
-        versionName = "1.0.0-custom"
+        versionCode = (env("PREFETCH_TEST_VERSION_CODE") ?: "1361").toInt()
+        versionName = env("PREFETCH_TEST_VERSION_NAME") ?: "1.0.0-prefetch4k"
 
         buildConfigField("String", "PARENTAL_GUIDE_API_URL", "\"${localProperties.getProperty("PARENTAL_GUIDE_API_URL", "")}\"")
         buildConfigField("String", "INTRODB_API_URL", "\"${localProperties.getProperty("INTRODB_API_URL", "")}\"")
@@ -184,12 +190,12 @@ android {
         buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
 
         // In-app updater (GitHub Releases)
-        buildConfigField("String", "GITHUB_OWNER", "\"Cxsmo-ai\"")
-        buildConfigField("String", "GITHUB_REPO", "\"NuvioTV-Custom\"")
+        buildConfigField("String", "GITHUB_OWNER", "\"peden88\"")
+        buildConfigField("String", "GITHUB_REPO", "\"NuvioTV\"")
         // Keep update checks pointed at this fork's own releases. The fork
         // uses a distinct repository so upstream releases are never offered
         // as updates to a custom build.
-        buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "true")
+        buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")
     }
 
     flavorDimensions += "distribution"
@@ -221,11 +227,23 @@ android {
             storeFile = releaseStoreFilePath?.let(::file) ?: file("../nuviotv.jks")
             storePassword = releaseStorePasswordValue
         }
+        if (usePrefetchTestSigning) {
+            create("prefetchTest") {
+                keyAlias = prefetchTestKeyAliasValue
+                keyPassword = prefetchTestKeyPasswordValue
+                storeFile = file(prefetchTestStoreFilePath!!)
+                storePassword = prefetchTestStorePasswordValue
+            }
+        }
     }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (usePrefetchTestSigning) {
+                signingConfigs.getByName("prefetchTest")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isDebuggable = false
             isMinifyEnabled = false
 
@@ -302,10 +320,10 @@ android {
         abi {
             isEnable = !buildingAppBundle
             reset()
-            include("armeabi-v7a", "arm64-v8a")
-            // Publish one device-agnostic APK alongside the optimized ABI APKs.
-            // The release workflow attaches all of them to the same release.
-            isUniversalApk = true
+            include("armeabi-v7a")
+            // Google TV Streamer (4K) exposes a 32-bit ARM Android userspace.
+            // Build only the ABI it can install to keep the APK lean.
+            isUniversalApk = false
         }
     }
 

@@ -164,6 +164,7 @@ import com.nuvio.tv.ui.components.BrandWordmark
 import com.nuvio.tv.ui.components.ScreensaverOverlay
 import com.nuvio.tv.ui.components.AppDimmerOverlay
 import com.nuvio.tv.ui.components.LocalAppDimPercent
+import com.nuvio.tv.ui.components.LocalAutoScrollDescriptionsEnabled
 import com.nuvio.tv.ui.components.LocalCardDepthStyle
 import com.nuvio.tv.ui.components.ProfileAvatarCircle
 import com.nuvio.tv.ui.navigation.NuvioNavHost
@@ -583,6 +584,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 val appDimPercent by themeDataStore.appDimPercent.collectAsState(initial = ThemeDataStore.DEFAULT_APP_DIM_PERCENT)
+                val autoScrollDescriptionsEnabled by layoutPreferenceDataStore.autoScrollDescriptionsEnabled.collectAsState(initial = false)
                 CompositionLocalProvider(
                     LocalDensity provides clampedFontScaleDensity,
                     LocalBringIntoViewSpec provides bringIntoViewSpec,
@@ -591,7 +593,8 @@ class MainActivity : ComponentActivity() {
                     LocalCardDepthStyle provides mainUiPrefs.cardDepthStyle,
                     LocalMemberAccess provides mainUiPrefs.memberAccess,
                     com.nuvio.tv.core.player.LocalTrailerPlayerPool provides trailerPlayerPool,
-                    LocalAppDimPercent provides appDimPercent
+                    LocalAppDimPercent provides appDimPercent,
+                    LocalAutoScrollDescriptionsEnabled provides autoScrollDescriptionsEnabled
                 ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -886,6 +889,16 @@ class MainActivity : ComponentActivity() {
                                     )
                                 ) {
                                     launchSingleTop = true
+                                }
+                            }
+                            is AppDeepLink.Search -> {
+                                pendingDeepLinkUrl.value = null
+                                navController.navigate(Screen.Search.route) {
+                                    launchSingleTop = true
+                                }
+                                navController.currentBackStackEntry?.savedStateHandle?.apply {
+                                    set("deep_link_query", deepLink.query)
+                                    set("deep_link_auto_open", deepLink.openFirstMatch)
                                 }
                             }
                             is AppDeepLink.AddonInstall -> {

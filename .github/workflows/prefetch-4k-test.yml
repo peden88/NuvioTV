@@ -68,14 +68,27 @@ jobs:
           print(f"Configured public backend: {backend}")
           PY
 
-      - name: Install isolated test signing key
+      - name: Install permanent Prefetch 4K signing key
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$HOME/.android"
-          base64 --decode .github/test-signing/nuvio-prefetch-4k-debug.jks.b64 > "$HOME/.android/debug.keystore"
-          chmod 600 "$HOME/.android/debug.keystore"
-          keytool -list             -keystore "$HOME/.android/debug.keystore"             -storepass android             -alias androiddebugkey             >/dev/null
+          KEYSTORE="$RUNNER_TEMP/nuvio-prefetch-4k.jks"
+          EXPECTED_SHA256='7FB0F9E9A12E6D4CA78E12D29EE2062E820DB5C89CF62C051B1C7635462F7D98'
+
+          base64 --decode .github/test-signing/nuvio-prefetch-4k-debug.jks.b64 > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+
+          ACTUAL_SHA256="$(keytool -list -v             -keystore "$KEYSTORE"             -storepass android             -alias androiddebugkey             | sed -n 's/^[[:space:]]*SHA256: //p'             | tr -d ':'             | tr '[:lower:]' '[:upper:]'             | head -1)"
+
+          test "$ACTUAL_SHA256" = "$EXPECTED_SHA256"
+
+          {
+            echo "PREFETCH_TEST_STORE_FILE=$KEYSTORE"
+            echo "PREFETCH_TEST_STORE_PASSWORD=android"
+            echo "PREFETCH_TEST_KEY_ALIAS=androiddebugkey"
+            echo "PREFETCH_TEST_KEY_PASSWORD=android"
+            echo "PREFETCH_EXPECTED_SIGNER_SHA256=$(echo "$EXPECTED_SHA256" | tr '[:upper:]' '[:lower:]')"
+          } >> "$GITHUB_ENV"
 
       - name: Run prefetch policy tests
         run: |
@@ -105,6 +118,14 @@ jobs:
           test -x "$APKSIGNER"
 
           "$APKSIGNER" verify --verbose --print-certs "$RELEASE_APK" | tee apk-signature.txt
+
+          ACTUAL_SIGNER_SHA256="$(sed -n 's/^.*certificate SHA-256 digest: //p' apk-signature.txt | head -1)"
+          if [ "$ACTUAL_SIGNER_SHA256" != "$PREFETCH_EXPECTED_SIGNER_SHA256" ]; then
+            echo "Published APK signer changed unexpectedly"
+            echo "Expected: $PREFETCH_EXPECTED_SIGNER_SHA256"
+            echo "Actual:   $ACTUAL_SIGNER_SHA256"
+            exit 1
+          fi
 
           AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -1)"
           test -x "$AAPT"

@@ -666,7 +666,7 @@ private fun AnimeCard(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
-                    modifier = Modifier.padding(horizontal = 5.dp, top = 8.dp)
+                    modifier = Modifier.padding(start = 5.dp, top = 8.dp, end = 5.dp)
                 )
             }
 

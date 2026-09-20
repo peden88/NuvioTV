@@ -158,6 +158,7 @@ internal fun PlaybackSettingsSections(
     onSetLoadingOverlayEnabled: (Boolean) -> Unit,
     onSetPauseOverlayEnabled: (Boolean) -> Unit,
     onSetOsdClockEnabled: (Boolean) -> Unit,
+    onSetSeekIntervalSeconds: (Int) -> Unit,
     onSetSkipIntroEnabled: (Boolean) -> Unit,
     onSetSkipSourcePolicy: (SkipSourcePolicy) -> Unit,
     onSetSkipSourceEnabled: (SkipSource, Boolean) -> Unit,
@@ -406,6 +407,22 @@ internal fun PlaybackSettingsSections(
                     subtitle = stringResource(R.string.playback_show_clock_sub),
                     isChecked = playerSettings.osdClockEnabled,
                     onCheckedChange = onSetOsdClockEnabled,
+                    onFocused = { focusedSection = PlaybackSection.GENERAL },
+                    enabled = !generalUi.isExternalPlayer
+                )
+            }
+
+            item(key = "general_seek_interval") {
+                SliderSettingsItem(
+                    icon = Icons.Default.SwapHoriz,
+                    title = "Seek interval",
+                    subtitle = "Seconds jumped by left/right or rewind/fast-forward",
+                    value = playerSettings.seekIntervalSeconds,
+                    valueText = "${playerSettings.seekIntervalSeconds}s",
+                    minValue = PlayerSettings.MIN_SEEK_INTERVAL_SECONDS,
+                    maxValue = PlayerSettings.MAX_SEEK_INTERVAL_SECONDS,
+                    step = 5,
+                    onValueChange = onSetSeekIntervalSeconds,
                     onFocused = { focusedSection = PlaybackSection.GENERAL },
                     enabled = !generalUi.isExternalPlayer
                 )

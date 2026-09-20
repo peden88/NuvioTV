@@ -42,13 +42,13 @@ jobs:
 
       - name: Build signed release APK
         env:
-          ANIME_TV_VERSION_CODE: ${{ 300000 + github.run_number }}
-          ANIME_TV_VERSION_NAME: 1.0.${{ github.run_number }}-tv
           ANIME_TV_KEYSTORE_FILE: anime-calendar-tv.jks
           ANIME_TV_KEYSTORE_PASSWORD: animecalendar-tv-test
           ANIME_TV_KEY_ALIAS: animecalendartv
           ANIME_TV_KEY_PASSWORD: animecalendar-tv-test
         run: |
+          export ANIME_TV_VERSION_CODE=$((300000 + GITHUB_RUN_NUMBER))
+          export ANIME_TV_VERSION_NAME="1.0.${GITHUB_RUN_NUMBER}-tv"
           gradle -p anime-calendar-tv --no-daemon clean :app:assembleRelease
 
       - name: Validate package and signature

@@ -192,6 +192,16 @@ private fun parseAnimeObject(wrapper: JSONObject, inheritedLabel: String?): Anim
     val explicitDate = firstString(wrapper, "air_date", "airDate", "date", "datetime", "airing_time")
     val derivedLabel = explicitDate ?: airingAt?.let(::formatAiringLabel) ?: inheritedLabel
 
+    val startDateObject = source.optJSONObject("startDate")
+        ?: source.optJSONObject("start_date")
+    val startDateLabel = firstString(
+        source,
+        "start_date",
+        "startDate",
+        "premiere_date",
+        "premiereDate"
+    ) ?: startDateObject?.let(::formatStartDateObject)
+
     return AnimeItem(
         anilistId = id,
         title = title,
@@ -207,6 +217,7 @@ private fun parseAnimeObject(wrapper: JSONObject, inheritedLabel: String?): Anim
         episodeNumber = episode,
         airingAtEpochSeconds = airingAt,
         scheduleLabel = derivedLabel,
+        startDateLabel = startDateLabel,
         selected = firstBoolean(wrapper, "selected", "watchlisted", "in_watchlist")
             ?: firstBoolean(source, "selected", "watchlisted", "in_watchlist")
             ?: false
@@ -279,6 +290,17 @@ private fun looksLikeCalendarLabel(value: String): Boolean {
             "monday", "tuesday", "wednesday", "thursday",
             "friday", "saturday", "sunday", "today", "tomorrow"
         ).any(lower::contains)
+}
+
+private fun formatStartDateObject(source: JSONObject): String? {
+    val year = firstInt(source, "year") ?: return null
+    val month = firstInt(source, "month") ?: return year.toString()
+    val day = firstInt(source, "day")
+    return if (day != null) {
+        "%04d-%02d-%02d".format(year, month, day)
+    } else {
+        "%04d-%02d".format(year, month)
+    }
 }
 
 private fun formatAiringLabel(epochSeconds: Long): String {

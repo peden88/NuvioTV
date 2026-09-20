@@ -15,95 +15,125 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 
 class AnimeCalendarApi(
-    baseUrl: String = BuildConfig.ANIME_CALENDAR_BASE_URL
+    baseUrl: String,
+    private val token: String
 ) {
-    private val root = baseUrl.trimEnd('/')
+    private val root = baseUrl.trim().trimEnd('/')
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     private val client = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    suspend fun watchlist(): List<AnimeItem> = getItems("/api/watchlist")
-    suspend fun calendar(): List<AnimeItem> = getItems("/api/calendar")
-    suspend fun upcoming(): List<AnimeItem> = getItems("/api/seasons/upcoming")
-    suspend fun currentSeason(): List<AnimeItem> = getItems("/api/seasons/current")
-
-    suspend fun setWatchlisted(anilistId: Int, selected: Boolean): Boolean = withContext(Dispatchers.IO) {
-        if (selected) {
-            attempt("PATCH", "/api/watchlist/$anilistId", JSONObject().put("selected", true).toString()) ||
-                attempt(
-                    "POST",
-                    "/api/watchlist",
-                    JSONObject().put("anilist_id", anilistId).put("selected", true).toString()
-                ) ||
-                attempt(
-                    "POST",
-                    "/api/watchlist/bulk",
-                    JSONObject()
-                        .put("anilist_ids", JSONArray().put(anilistId))
-                        .put("selected", true)
-                        .toString()
-                )
-        } else {
-            attempt("DELETE", "/api/watchlist/$anilistId", null) ||
-                attempt("PATCH", "/api/watchlist/$anilistId", JSONObject().put("selected", false).toString()) ||
-                attempt(
-                    "POST",
-                    "/api/watchlist",
-                    JSONObject().put("anilist_id", anilistId).put("selected", false).toString()
-                )
+    suspend fun bootstrap(): AnimeCalendarSnapshot = withContext(Dispatchers.IO) {
+        val rootObject = getObject("/api/tv/anime-calendar/bootstrap")
+        val watchlist = parseAnimeNode(rootObject.opt("watchlist"))
+        val watchlistIds = watchlist.mapTo(mutableSetOf()) { it.anilistId }
+        fun mark(items: List<AnimeItem>) = items.map { item ->
+            item.copy(selected = item.selected || item.anilistId in watchlistIds)
         }
+
+        AnimeCalendarSnapshot(
+            watchlist = mark(watchlist).sortedBy { it.displayTitle.lowercase() },
+            calendar = mark(parseAnimeNode(rootObject.opt("calendar"))),
+            upcoming = mark(parseAnimeNode(rootObject.opt("upcoming"))),
+            currentSeason = mark(parseAnimeNode(rootObject.opt("current"))),
+            resolutions = parseResolutions(rootObject.optJSONObject("resolutions"))
+        )
     }
 
-    private suspend fun getItems(path: String): List<AnimeItem> = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
+    suspend fun toggleWatchlist(anilistId: Int): Boolean = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("id", anilistId).toString()
+        request(
+            method = "POST",
+            path = "/api/tv/anime-calendar/watchlist/toggle",
+            body = body
+        )
+        true
+    }
+
+    suspend fun detail(anilistId: Int): Pair<AnimeItem?, NuvioResolution?> = withContext(Dispatchers.IO) {
+        val payload = getObject("/api/tv/anime-calendar/anime/$anilistId")
+        val parsed = parseAnimeNode(payload.opt("anime"))
+        val item = parsed.firstOrNull { it.anilistId == anilistId } ?: parsed.firstOrNull()
+        val resolution = payload.optJSONObject("nuvio")?.let(::parseResolution)
+        item to resolution
+    }
+
+    suspend fun health(): Boolean = withContext(Dispatchers.IO) {
+        getObject("/api/tv/anime-calendar/health").optBoolean("ok", false)
+    }
+
+    private fun getObject(path: String): JSONObject {
+        val raw = request("GET", path, null)
+        return JSONTokener(raw).nextValue() as? JSONObject
+            ?: error("Unexpected Anime Calendar TV response")
+    }
+
+    private fun request(method: String, path: String, body: String?): String {
+        val builder = Request.Builder()
             .url(root + path)
             .header("Accept", "application/json")
-            .get()
-            .build()
-        client.newCall(request).execute().use { response ->
-            val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                error("${response.code} ${response.message}: ${body.take(240)}")
-            }
-            parseAnimePayload(body)
-        }
-    }
+            .header("Authorization", "Bearer $token")
 
-    private fun attempt(method: String, path: String, body: String?): Boolean {
-        return runCatching {
-            val builder = Request.Builder()
-                .url(root + path)
-                .header("Accept", "application/json")
-            when (method) {
-                "POST" -> builder.post((body ?: "{}").toRequestBody(jsonType))
-                "PATCH" -> builder.patch((body ?: "{}").toRequestBody(jsonType))
-                "DELETE" -> builder.delete()
-                else -> return false
+        when (method) {
+            "POST" -> builder.post((body ?: "{}").toRequestBody(jsonType))
+            else -> builder.get()
+        }
+
+        client.newCall(builder.build()).execute().use { response ->
+            val responseBody = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                error("${response.code} ${response.message}: ${responseBody.take(280)}")
             }
-            client.newCall(builder.build()).execute().use { it.isSuccessful }
-        }.getOrDefault(false)
+            return responseBody
+        }
     }
 }
 
-internal fun parseAnimePayload(raw: String): List<AnimeItem> {
-    if (raw.isBlank()) return emptyList()
-    val root = runCatching { JSONTokener(raw).nextValue() }.getOrNull() ?: return emptyList()
+internal fun parseAnimeNode(node: Any?): List<AnimeItem> {
     val collected = mutableListOf<AnimeItem>()
-    collectAnime(root, inheritedLabel = null, output = collected)
+    collectAnime(node, inheritedLabel = null, output = collected)
     return collected
         .filter { it.anilistId > 0 && it.displayTitle.isNotBlank() }
         .distinctBy { it.anilistId to (it.episodeNumber ?: -1) to (it.airingAtEpochSeconds ?: -1L) }
 }
 
+internal fun parseAnimePayload(raw: String): List<AnimeItem> {
+    if (raw.isBlank()) return emptyList()
+    val root = runCatching { JSONTokener(raw).nextValue() }.getOrNull() ?: return emptyList()
+    return parseAnimeNode(root)
+}
+
+private fun parseResolutions(source: JSONObject?): Map<Int, NuvioResolution> {
+    if (source == null) return emptyMap()
+    val result = linkedMapOf<Int, NuvioResolution>()
+    val keys = source.keys()
+    while (keys.hasNext()) {
+        val key = keys.next()
+        val id = key.toIntOrNull() ?: continue
+        val resolution = source.optJSONObject(key)?.let(::parseResolution) ?: continue
+        result[id] = resolution
+    }
+    return result
+}
+
+private fun parseResolution(source: JSONObject): NuvioResolution? {
+    val contentId = source.optString("contentId").clean() ?: return null
+    val contentType = source.optString("contentType").clean() ?: return null
+    return NuvioResolution(
+        contentId = contentId,
+        contentType = contentType,
+        status = source.optString("status").clean(),
+        title = source.optString("title").clean()
+    )
+}
+
 private fun collectAnime(node: Any?, inheritedLabel: String?, output: MutableList<AnimeItem>) {
     when (node) {
-        is JSONArray -> {
-            for (index in 0 until node.length()) {
-                collectAnime(node.opt(index), inheritedLabel, output)
-            }
+        is JSONArray -> for (index in 0 until node.length()) {
+            collectAnime(node.opt(index), inheritedLabel, output)
         }
         is JSONObject -> {
             parseAnimeObject(node, inheritedLabel)?.let {
@@ -152,8 +182,7 @@ private fun parseAnimeObject(wrapper: JSONObject, inheritedLabel: String?): Anim
         ?: cover?.optString("large").clean()
         ?: cover?.optString("medium").clean()
         ?: firstString(source, "poster", "poster_url", "image", "image_url", "cover", "cover_image")
-    val backdrop = source.optJSONObject("bannerImage")?.optString("large").clean()
-        ?: firstString(source, "bannerImage", "banner_image", "backdrop", "backdrop_url")
+    val backdrop = firstString(source, "bannerImage", "banner_image", "backdrop", "backdrop_url")
 
     val nextAiring = source.optJSONObject("nextAiringEpisode") ?: wrapper.optJSONObject("nextAiringEpisode")
     val airingAt = firstLong(wrapper, "airing_at", "airingAt", "airing_epoch", "timestamp")
@@ -161,9 +190,7 @@ private fun parseAnimeObject(wrapper: JSONObject, inheritedLabel: String?): Anim
     val episode = firstInt(wrapper, "episode", "episode_number", "episodeNumber")
         ?: firstInt(nextAiring, "episode")
     val explicitDate = firstString(wrapper, "air_date", "airDate", "date", "datetime", "airing_time")
-    val derivedLabel = explicitDate
-        ?: airingAt?.let(::formatAiringLabel)
-        ?: inheritedLabel
+    val derivedLabel = explicitDate ?: airingAt?.let(::formatAiringLabel) ?: inheritedLabel
 
     return AnimeItem(
         anilistId = id,
@@ -199,8 +226,7 @@ private fun firstString(obj: JSONObject?, vararg names: String): String? {
 private fun firstInt(obj: JSONObject?, vararg names: String): Int? {
     if (obj == null) return null
     for (name in names) {
-        val value = obj.opt(name)
-        when (value) {
+        when (val value = obj.opt(name)) {
             is Number -> return value.toInt()
             is String -> value.trim().toIntOrNull()?.let { return it }
         }
@@ -211,8 +237,7 @@ private fun firstInt(obj: JSONObject?, vararg names: String): Int? {
 private fun firstLong(obj: JSONObject?, vararg names: String): Long? {
     if (obj == null) return null
     for (name in names) {
-        val value = obj.opt(name)
-        when (value) {
+        when (val value = obj.opt(name)) {
             is Number -> return value.toLong()
             is String -> value.trim().toLongOrNull()?.let { return it }
         }
@@ -250,8 +275,10 @@ private fun String.stripHtml(): String = this
 private fun looksLikeCalendarLabel(value: String): Boolean {
     val lower = value.lowercase()
     return lower.matches(Regex("\\d{4}-\\d{1,2}-\\d{1,2}")) ||
-        listOf("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-            "today", "tomorrow").any(lower::contains)
+        listOf(
+            "monday", "tuesday", "wednesday", "thursday",
+            "friday", "saturday", "sunday", "today", "tomorrow"
+        ).any(lower::contains)
 }
 
 private fun formatAiringLabel(epochSeconds: Long): String {

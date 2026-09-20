@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,10 +48,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -270,27 +273,29 @@ private fun Header(
 private fun TvNavButton(
     selected: Boolean,
     onClick: () -> Unit,
-    content: @Composable Row.() -> Unit
+    content: @Composable RowScope.() -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(999.dp)
-    Row(
-        modifier = Modifier
-            .clip(shape)
-            .background(
-                when {
-                    focused -> Color.White
-                    selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-                    else -> Color.White.copy(alpha = 0.07f)
-                }
-            )
-            .clickable(onClick = onClick)
-            .onFocusChanged { focused = it.isFocused }
-            .focusable()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        content = content
-    )
+    CompositionLocalProvider(LocalContentColor provides if (focused) Color.Black else Color.White) {
+        Row(
+            modifier = Modifier
+                .clip(shape)
+                .background(
+                    when {
+                        focused -> Color.White
+                        selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+                        else -> Color.White.copy(alpha = 0.07f)
+                    }
+                )
+                .clickable(onClick = onClick)
+                .onFocusChanged { focused = it.isFocused }
+                .focusable()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content
+        )
+    }
 }
 
 @Composable

@@ -302,9 +302,9 @@ android {
         abi {
             isEnable = !buildingAppBundle
             reset()
-            include("arm64-v8a")
-            // Publish one device-agnostic APK alongside the optimized ABI APKs.
-            // The release workflow attaches all of them to the same release.
+            include("armeabi-v7a")
+            // Google TV Streamer (4K) exposes a 32-bit ARM Android userspace.
+            // Build only the ABI it can install to keep the APK lean.
             isUniversalApk = false
         }
     }

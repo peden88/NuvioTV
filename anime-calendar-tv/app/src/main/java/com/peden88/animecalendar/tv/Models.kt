@@ -15,6 +15,7 @@ data class AnimeItem(
     val episodeNumber: Int? = null,
     val airingAtEpochSeconds: Long? = null,
     val scheduleLabel: String? = null,
+    val startDateLabel: String? = null,
     val selected: Boolean = false
 ) {
     val displayTitle: String

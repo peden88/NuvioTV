@@ -657,6 +657,19 @@ private fun AnimeCard(
             }
         }
 
+        scheduleOverride
+            ?.takeIf(String::isNotBlank)
+            ?.let { schedule ->
+                Text(
+                    text = schedule,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 5.dp, top = 8.dp)
+                )
+            }
+
         Text(
             text = item.displayTitle,
             color = Color.White,
@@ -692,17 +705,19 @@ private fun AnimeCard(
             )
         }
 
-        (scheduleOverride ?: item.scheduleLabel)
-            ?.takeIf(String::isNotBlank)
-            ?.let { schedule ->
-            Text(
-                text = schedule,
-                color = MaterialTheme.colorScheme.primary,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp)
-            )
+        if (scheduleOverride == null) {
+            item.scheduleLabel
+                ?.takeIf(String::isNotBlank)
+                ?.let { schedule ->
+                    Text(
+                        text = schedule,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp)
+                    )
+                }
         }
     }
 }

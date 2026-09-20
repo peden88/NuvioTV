@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Upcoming
 import androidx.compose.material3.AlertDialog
@@ -77,6 +78,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -149,6 +151,7 @@ private fun AnimeCalendarTvApp(
                         title = "Upcoming",
                         subtitle = "Upcoming anime and scheduled releases",
                         items = state.upcoming,
+                        showStartDate = true,
                         watchlistIds = state.watchlistIds,
                         mutatingIds = state.mutatingIds,
                         emptyMessage = "No upcoming titles were returned by the calendar.",
@@ -225,23 +228,32 @@ private fun Header(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(60.dp)
             .background(Color(0xFF10121A))
-            .padding(horizontal = 30.dp, vertical = 18.dp),
+            .padding(horizontal = 18.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Column(modifier = Modifier.padding(end = 16.dp)) {
+        Column(
+            modifier = Modifier
+                .width(126.dp)
+                .padding(end = 8.dp),
+            verticalArrangement = Arrangement.Center
+        ) {
             Text(
                 "Anime Calendar",
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
+                fontSize = 15.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+                maxLines = 1
             )
             Text(
                 "TV",
                 color = MaterialTheme.colorScheme.primary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
+                fontSize = 9.sp,
+                lineHeight = 10.sp,
+                fontWeight = FontWeight.Bold
             )
         }
 
@@ -258,10 +270,10 @@ private fun Header(
                         CalendarTab.BROWSE -> Icons.Default.Movie
                     },
                     contentDescription = null,
-                    modifier = Modifier.size(19.dp)
+                    modifier = Modifier.size(15.dp)
                 )
-                Spacer(Modifier.width(7.dp))
-                Text(tab.label, maxLines = 1)
+                Spacer(Modifier.width(5.dp))
+                Text(tab.label, maxLines = 1, fontSize = 12.sp)
             }
         }
 
@@ -269,16 +281,22 @@ private fun Header(
 
         TvNavButton(selected = false, onClick = onRefresh) {
             if (refreshing) {
-                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
             } else {
-                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = "Refresh",
+                    modifier = Modifier.size(17.dp)
+                )
             }
-            Spacer(Modifier.width(7.dp))
-            Text("Refresh")
         }
 
         TvNavButton(selected = false, onClick = onSettings) {
-            Text("Connection")
+            Icon(
+                Icons.Default.Settings,
+                contentDescription = "Connection",
+                modifier = Modifier.size(17.dp)
+            )
         }
     }
 }
@@ -305,7 +323,7 @@ private fun TvNavButton(
                 .clickable(onClick = onClick)
                 .onFocusChanged { focused = it.isFocused }
                 .focusable()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             content = content
         )
@@ -317,6 +335,7 @@ private fun AnimeGrid(
     title: String,
     subtitle: String,
     items: List<AnimeItem>,
+    showStartDate: Boolean = false,
     watchlistIds: Set<Int>,
     mutatingIds: Set<Int>,
     emptyMessage: String,
@@ -346,7 +365,8 @@ private fun AnimeGrid(
                         isWatchlisted = item.anilistId in watchlistIds,
                         busy = item.anilistId in mutatingIds,
                         onClick = { onOpen(item) },
-                        onLongPress = { onLongPress(item) }
+                        onLongPress = { onLongPress(item) },
+                        showStartDate = showStartDate
                     )
                 }
             }
@@ -363,7 +383,9 @@ private fun CalendarSection(
     onLongPress: (AnimeItem) -> Unit
 ) {
     val grouped = remember(items) {
-        items.groupBy { it.scheduleLabel?.takeIf(String::isNotBlank) ?: "Schedule" }
+        items
+            .sortedBy { it.airingAtEpochSeconds ?: Long.MAX_VALUE }
+            .groupBy(::calendarDayKey)
     }
 
     LazyColumn(
@@ -386,17 +408,18 @@ private fun CalendarSection(
             }
         }
 
-        grouped.forEach { (label, dayItems) ->
-            item(key = "header:$label") {
+        grouped.forEach { (dayKey, dayItems) ->
+            val dayLabel = calendarDayLabel(dayItems.firstOrNull(), dayKey)
+            item(key = "header:$dayKey") {
                 Text(
-                    text = label,
+                    text = dayLabel,
                     modifier = Modifier.padding(horizontal = 30.dp),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            item(key = "row:$label") {
+            item(key = "row:$dayKey") {
                 LazyRow(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 30.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -408,7 +431,8 @@ private fun CalendarSection(
                             busy = item.anilistId in mutatingIds,
                             onClick = { onOpen(item) },
                             onLongPress = { onLongPress(item) },
-                            compact = true
+                            compact = true,
+                            scheduleOverride = calendarTimeLabel(item)
                         )
                     }
                 }
@@ -542,7 +566,9 @@ private fun AnimeCard(
     busy: Boolean,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
-    compact: Boolean = false
+    compact: Boolean = false,
+    showStartDate: Boolean = false,
+    scheduleOverride: String? = null
 ) {
     var focused by remember { mutableStateOf(false) }
     var longPressFired by remember { mutableStateOf(false) }
@@ -655,7 +681,20 @@ private fun AnimeCard(
             )
         }
 
-        item.scheduleLabel?.takeIf(String::isNotBlank)?.let { schedule ->
+        if (showStartDate) {
+            Text(
+                text = formatStartDate(item.startDateLabel),
+                color = MaterialTheme.colorScheme.secondary,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp)
+            )
+        }
+
+        (scheduleOverride ?: item.scheduleLabel)
+            ?.takeIf(String::isNotBlank)
+            ?.let { schedule ->
             Text(
                 text = schedule,
                 color = MaterialTheme.colorScheme.primary,
@@ -666,6 +705,76 @@ private fun AnimeCard(
             )
         }
     }
+}
+
+private fun calendarDayKey(item: AnimeItem): String {
+    item.airingAtEpochSeconds?.let { epoch ->
+        return Instant.ofEpochSecond(epoch)
+            .atZone(ZoneId.systemDefault())
+            .toLocalDate()
+            .toString()
+    }
+
+    return item.scheduleLabel
+        ?.substringBefore(" · ")
+        ?.takeIf(String::isNotBlank)
+        ?: "Schedule"
+}
+
+private fun calendarDayLabel(item: AnimeItem?, fallback: String): String {
+    item?.airingAtEpochSeconds?.let { epoch ->
+        return DateTimeFormatter.ofPattern("EEEE d MMMM")
+            .format(
+                Instant.ofEpochSecond(epoch)
+                    .atZone(ZoneId.systemDefault())
+            )
+    }
+
+    return runCatching {
+        LocalDate.parse(fallback)
+            .format(DateTimeFormatter.ofPattern("EEEE d MMMM"))
+    }.getOrDefault(fallback)
+}
+
+private fun calendarTimeLabel(item: AnimeItem): String? {
+    item.airingAtEpochSeconds?.let { epoch ->
+        return DateTimeFormatter.ofPattern("HH:mm")
+            .format(
+                Instant.ofEpochSecond(epoch)
+                    .atZone(ZoneId.systemDefault())
+            )
+    }
+
+    return item.scheduleLabel
+        ?.substringAfter(" · ", "")
+        ?.takeIf(String::isNotBlank)
+}
+
+private fun formatStartDate(raw: String?): String {
+    if (raw.isNullOrBlank()) return "Start date TBA"
+
+    val normalized = raw.trim()
+
+    val parsed = listOf(
+        "yyyy-MM-dd",
+        "yyyy-MM"
+    ).firstNotNullOfOrNull { pattern ->
+        runCatching {
+            when (pattern) {
+                "yyyy-MM-dd" -> LocalDate.parse(normalized)
+                    .format(DateTimeFormatter.ofPattern("d MMM yyyy"))
+                else -> {
+                    val parts = normalized.split("-")
+                    val year = parts.getOrNull(0)?.toIntOrNull() ?: return@runCatching null
+                    val month = parts.getOrNull(1)?.toIntOrNull() ?: return@runCatching null
+                    java.time.YearMonth.of(year, month)
+                        .format(DateTimeFormatter.ofPattern("MMM yyyy"))
+                }
+            }
+        }.getOrNull()
+    }
+
+    return parsed?.let { "Starts $it" } ?: "Starts $normalized"
 }
 
 @Composable

@@ -37,7 +37,11 @@ class AnimeCalendarApi(
         AnimeCalendarSnapshot(
             watchlist = mark(watchlist).sortedBy { it.displayTitle.lowercase() },
             calendar = mark(parseAnimeNode(rootObject.opt("calendar"))),
-            upcoming = mark(parseAnimeNode(rootObject.opt("upcoming"))),
+            upcoming = mark(parseAnimeNode(rootObject.opt("upcoming")))
+                .sortedWith(
+                    compareBy<AnimeItem> { startDateSortKey(it.startDateLabel) }
+                        .thenBy { it.displayTitle.lowercase() }
+                ),
             currentSeason = mark(parseAnimeNode(rootObject.opt("current"))),
             resolutions = parseResolutions(rootObject.optJSONObject("resolutions"))
         )
@@ -290,6 +294,21 @@ private fun looksLikeCalendarLabel(value: String): Boolean {
             "monday", "tuesday", "wednesday", "thursday",
             "friday", "saturday", "sunday", "today", "tomorrow"
         ).any(lower::contains)
+}
+
+private fun startDateSortKey(raw: String?): String {
+    if (raw.isNullOrBlank()) return "9999-12-31"
+
+    val value = raw.trim()
+
+    return when {
+        value.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) -> value
+        value.matches(Regex("\\d{4}-\\d{2}")) -> "$value-01"
+        value.matches(Regex("\\d{4}")) -> "$value-01-01"
+        value.length >= 10 && value.substring(0, 10)
+            .matches(Regex("\\d{4}-\\d{2}-\\d{2}")) -> value.substring(0, 10)
+        else -> "9999-12-31"
+    }
 }
 
 private fun formatStartDateObject(source: JSONObject): String? {

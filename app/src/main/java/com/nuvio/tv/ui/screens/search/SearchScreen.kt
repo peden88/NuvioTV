@@ -116,6 +116,9 @@ private const val SEARCH_SKELETON_ROW_COUNT = 2
 @Composable
 fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel(),
+    initialDeepLinkQuery: String? = null,
+    autoOpenInitialResult: Boolean = false,
+    onDeepLinkConsumed: () -> Unit = {},
     onNavigateToDetail: (String, String, String) -> Unit,
     onNavigateToSeeAll: (catalogId: String, addonId: String, type: String) -> Unit = { _, _, _ -> },
     onOpenDiscover: () -> Unit = {}
@@ -149,6 +152,53 @@ fun SearchScreen(
     val didRestoreSearchFocus = remember { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
+    var deepLinkAutoOpenConsumed by rememberSaveable(initialDeepLinkQuery) { mutableStateOf(false) }
+
+    LaunchedEffect(initialDeepLinkQuery) {
+        val query = initialDeepLinkQuery?.trim().orEmpty()
+        if (query.isNotEmpty()) {
+            deepLinkAutoOpenConsumed = false
+            viewModel.onEvent(SearchEvent.QueryChanged(query))
+            viewModel.onEvent(SearchEvent.SubmitSearch)
+        }
+    }
+
+    LaunchedEffect(
+        initialDeepLinkQuery,
+        autoOpenInitialResult,
+        uiState.isSearching,
+        uiState.submittedQuery,
+        uiState.catalogRows
+    ) {
+        val requested = initialDeepLinkQuery?.trim().orEmpty()
+        if (requested.isEmpty() || !autoOpenInitialResult || deepLinkAutoOpenConsumed) return@LaunchedEffect
+        if (uiState.isSearching || uiState.submittedQuery.trim() != requested) return@LaunchedEffect
+
+        val candidates = uiState.catalogRows.flatMap { row ->
+            row.items
+                .filterNot { it.id.startsWith("__placeholder_") }
+                .map { item -> row to item }
+        }
+        if (candidates.isEmpty()) return@LaunchedEffect
+
+        fun normalized(value: String): String = value
+            .lowercase()
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .trim()
+            .replace(Regex("\\s+"), " ")
+
+        val requestedNormalized = normalized(requested)
+        val selected = candidates.firstOrNull { (_, item) ->
+            normalized(item.name) == requestedNormalized
+        } ?: candidates.first()
+
+        deepLinkAutoOpenConsumed = true
+        onDeepLinkConsumed()
+        val (row, item) = selected
+        HeroBackdropState.update(item.backdropUrl)
+        onNavigateToDetail(item.id, row.apiType, row.addonBaseUrl)
+    }
+
     val onVoiceQueryResultState = rememberUpdatedState<(String) -> Unit> { recognized ->
         if (recognized.isNotBlank()) {
             viewModel.onEvent(SearchEvent.QueryChanged(recognized))
@@ -443,6 +493,13 @@ fun SearchScreen(
         if (viewModel.hasSavedSearchFocus) return@LaunchedEffect
         repeat(2) { withFrameNanos { } }
         runCatching { topInputFocusRequester.requestFocus() }
+    }
+
+    LaunchedEffect(initialDeepLinkQuery, autoOpenInitialResult, uiState.submittedQuery) {
+        val requested = initialDeepLinkQuery?.trim().orEmpty()
+        if (requested.isNotEmpty() && !autoOpenInitialResult && uiState.submittedQuery.trim() == requested) {
+            onDeepLinkConsumed()
+        }
     }
 
     // Push search suggestions to the native keyboard suggestion bar

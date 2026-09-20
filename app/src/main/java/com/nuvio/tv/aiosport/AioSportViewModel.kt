@@ -170,7 +170,10 @@ class AioSportViewModel @Inject constructor(
         }
     }
 
-    suspend fun startPlayback(item: AioSportItem): Result<AioSportPlayback> {
+    suspend fun startPlayback(
+        item: AioSportItem,
+        contentType: String = "sport_event"
+    ): Result<AioSportPlayback> {
         val activeToken = token ?: return Result.failure(
             AioSportApiException("Your session has expired.", 403)
         )
@@ -178,11 +181,7 @@ class AioSportViewModel @Inject constructor(
             api.startPlayback(
                 token = activeToken,
                 item = item,
-                contentType = if (item.id.contains("channel", ignoreCase = true)) {
-                    "live_channel"
-                } else {
-                    "sport_event"
-                }
+                contentType = contentType
             )
         }
     }

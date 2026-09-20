@@ -888,6 +888,16 @@ class MainActivity : ComponentActivity() {
                                     launchSingleTop = true
                                 }
                             }
+                            is AppDeepLink.Search -> {
+                                pendingDeepLinkUrl.value = null
+                                navController.navigate(Screen.Search.route) {
+                                    launchSingleTop = true
+                                }
+                                navController.currentBackStackEntry?.savedStateHandle?.apply {
+                                    set("deep_link_query", deepLink.query)
+                                    set("deep_link_auto_open", deepLink.openFirstMatch)
+                                }
+                            }
                             is AppDeepLink.AddonInstall -> {
                                 navController.navigate(Screen.AddonManager.route) {
                                     launchSingleTop = true

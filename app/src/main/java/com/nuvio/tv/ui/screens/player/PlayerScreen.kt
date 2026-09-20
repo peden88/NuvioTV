@@ -915,7 +915,9 @@ fun PlayerScreen(
             } else {
                 uiState.loadingMessage.takeIf { uiState.showPlayerLoadingStatus || uiState.isTorrentStream }
             },
-            sourceLine = run {
+            sourceLine = if (BuildConfig.AIOSPORT_MODE) {
+                null
+            } else {
                 val provider = resolveStreamProvider(
                     streamName = uiState.currentStreamName,
                     streamDescription = null,
@@ -1495,7 +1497,7 @@ fun PlayerScreen(
 
         // Sources panel (slides in from right)
         AnimatedVisibility(
-            visible = uiState.showSourcesPanel && uiState.error == null,
+            visible = !BuildConfig.AIOSPORT_MODE && uiState.showSourcesPanel && uiState.error == null,
             enter = slideInHorizontally(
                 animationSpec = tween(220),
                 initialOffsetX = { it }

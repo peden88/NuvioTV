@@ -134,6 +134,12 @@ val releaseKeyPasswordValue = env("NUVIO_RELEASE_KEY_PASSWORD")
 val releaseStorePasswordValue = env("NUVIO_RELEASE_STORE_PASSWORD")
     ?: localProperties.getProperty("NUVIO_RELEASE_STORE_PASSWORD", "815787")
 
+val prefetchTestStoreFilePath = env("PREFETCH_TEST_STORE_FILE")
+val prefetchTestKeyAliasValue = env("PREFETCH_TEST_KEY_ALIAS") ?: "androiddebugkey"
+val prefetchTestKeyPasswordValue = env("PREFETCH_TEST_KEY_PASSWORD") ?: "android"
+val prefetchTestStorePasswordValue = env("PREFETCH_TEST_STORE_PASSWORD") ?: "android"
+val usePrefetchTestSigning = !prefetchTestStoreFilePath.isNullOrBlank()
+
 android {
     namespace = "com.nuvio.tv"
     compileSdk = 36
@@ -221,11 +227,23 @@ android {
             storeFile = releaseStoreFilePath?.let(::file) ?: file("../nuviotv.jks")
             storePassword = releaseStorePasswordValue
         }
+        if (usePrefetchTestSigning) {
+            create("prefetchTest") {
+                keyAlias = prefetchTestKeyAliasValue
+                keyPassword = prefetchTestKeyPasswordValue
+                storeFile = file(prefetchTestStoreFilePath!!)
+                storePassword = prefetchTestStorePasswordValue
+            }
+        }
     }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (usePrefetchTestSigning) {
+                signingConfigs.getByName("prefetchTest")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isDebuggable = false
             isMinifyEnabled = false
 

@@ -139,6 +139,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import com.nuvio.tv.data.local.InternalPlayerEngine
 import com.nuvio.tv.data.local.LibassRenderType
@@ -1343,7 +1344,7 @@ fun PlayerScreen(
         }
 
         AnimatedVisibility(
-            visible = uiState.showStreamSourceIndicator,
+            visible = !BuildConfig.AIOSPORT_MODE && uiState.showStreamSourceIndicator,
             enter = fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.fast)),
             exit = fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.fast)),
             modifier = Modifier
@@ -1481,7 +1482,7 @@ fun PlayerScreen(
 
         // Sources panel scrim
         AnimatedVisibility(
-            visible = uiState.showSourcesPanel && uiState.error == null,
+            visible = !BuildConfig.AIOSPORT_MODE && uiState.showSourcesPanel && uiState.error == null,
             enter = fadeIn(animationSpec = tween(120)),
             exit = fadeOut(animationSpec = tween(120))
 ) {
@@ -2323,14 +2324,16 @@ private fun PlayerControlsOverlay(
                             onFocused = onResetHideTimer
                         )
                         }
-                        ControlButton(
-                            icon = Icons.Default.Cloud,
-                            contentDescription = stringResource(R.string.cd_sources),
-                            onClick = onShowSourcesPanel,
-                            downFocusRequester = progressBarFocusRequester,
-                            onUpKey = onHideControls,
-                            onFocused = onResetHideTimer
-                        )
+                        if (!BuildConfig.AIOSPORT_MODE) {
+                            ControlButton(
+                                icon = Icons.Default.Cloud,
+                                contentDescription = stringResource(R.string.cd_sources),
+                                onClick = onShowSourcesPanel,
+                                downFocusRequester = progressBarFocusRequester,
+                                onUpKey = onHideControls,
+                                onFocused = onResetHideTimer
+                            )
+                        }
                         AnimatedVisibility(
                             visible = uiState.showMoreDialog,
                             enter = slideInHorizontally(

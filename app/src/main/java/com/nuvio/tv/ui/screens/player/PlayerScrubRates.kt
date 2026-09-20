@@ -9,6 +9,8 @@ package com.nuvio.tv.ui.screens.player
  */
 object PlayerScrubRates {
     const val STEP_SHORT_MS = 10_000L
+    // Compatibility alias for the historical default long-hold step.
+    const val STEP_MEDIUM_MS = 20_000L
     const val LONG_HOLD_THRESHOLD_MS = 3_000L
     const val MAX_ACCELERATED_STEP_MS = 60_000L
 

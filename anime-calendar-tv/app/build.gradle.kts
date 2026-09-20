@@ -21,7 +21,7 @@ android {
         create("release") {
             val path = System.getenv("ANIME_TV_KEYSTORE_FILE")
             if (!path.isNullOrBlank()) {
-                storeFile = file(path)
+                storeFile = rootProject.file(path)
                 storePassword = System.getenv("ANIME_TV_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("ANIME_TV_KEY_ALIAS")
                 keyPassword = System.getenv("ANIME_TV_KEY_PASSWORD")

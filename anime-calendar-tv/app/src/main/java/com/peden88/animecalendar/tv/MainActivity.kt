@@ -50,6 +50,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -117,7 +118,8 @@ private fun AnimeCalendarTvApp(
                 selectedTab = selectedTab,
                 refreshing = state.refreshing,
                 onTabSelected = { selectedTab = it },
-                onRefresh = { viewModel.refresh() }
+                onRefresh = { viewModel.refresh() },
+                onSettings = { viewModel.requestConfiguration() }
             )
 
             if (state.loading) {
@@ -189,7 +191,7 @@ private fun AnimeCalendarTvApp(
             busy = item.anilistId in state.mutatingIds,
             onDismiss = { detailItem = null },
             onToggleWatchlist = { viewModel.toggleWatchlist(item) },
-            onOpenNuvio = { openInNuvio(context, item) }
+            onOpenNuvio = { openInNuvio(context, item, state.resolutions[item.anilistId]) }
         )
     }
 
@@ -200,7 +202,14 @@ private fun AnimeCalendarTvApp(
             busy = item.anilistId in state.mutatingIds,
             onDismiss = { actionItem = null },
             onToggleWatchlist = { viewModel.toggleWatchlist(item) },
-            onOpenNuvio = { openInNuvio(context, item) }
+            onOpenNuvio = { openInNuvio(context, item, state.resolutions[item.anilistId]) }
+        )
+    }
+
+    if (state.needsConfiguration) {
+        ConnectionDialog(
+            initialBaseUrl = state.apiBaseUrl,
+            onSave = viewModel::saveConnection
         )
     }
 }
@@ -210,7 +219,8 @@ private fun Header(
     selectedTab: CalendarTab,
     refreshing: Boolean,
     onTabSelected: (CalendarTab) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onSettings: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -265,6 +275,10 @@ private fun Header(
             }
             Spacer(Modifier.width(7.dp))
             Text("Refresh")
+        }
+
+        TvNavButton(selected = false, onClick = onSettings) {
+            Text("Connection")
         }
     }
 }
@@ -755,6 +769,48 @@ private fun AnimeDetailDialog(
 }
 
 @Composable
+private fun ConnectionDialog(
+    initialBaseUrl: String,
+    onSave: (String, String) -> Unit
+) {
+    var baseUrl by rememberSaveable(initialBaseUrl) { mutableStateOf(initialBaseUrl) }
+    var token by rememberSaveable { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Connect Anime Calendar TV") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Enter the TV API token configured on the sync server. This is stored only on this device.",
+                    color = Color.White.copy(alpha = 0.72f)
+                )
+                OutlinedTextField(
+                    value = baseUrl,
+                    onValueChange = { baseUrl = it },
+                    label = { Text("API URL") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = token,
+                    onValueChange = { token = it },
+                    label = { Text("TV API token") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = baseUrl.isNotBlank() && token.isNotBlank(),
+                onClick = { onSave(baseUrl, token) }
+            ) {
+                Text("Connect")
+            }
+        }
+    )
+}
+
+@Composable
 private fun AnimeActionsDialog(
     item: AnimeItem,
     isWatchlisted: Boolean,
@@ -808,13 +864,26 @@ private fun Int.isSelectKey(): Boolean {
         this == KeyEvent.KEYCODE_BUTTON_A
 }
 
-private fun openInNuvio(context: Context, item: AnimeItem) {
-    val uri = Uri.Builder()
-        .scheme("nuvio")
-        .authority("search")
-        .appendQueryParameter("q", item.displayTitle)
-        .appendQueryParameter("open", "detail")
-        .build()
+private fun openInNuvio(
+    context: Context,
+    item: AnimeItem,
+    resolution: NuvioResolution?
+) {
+    val uri = if (resolution != null) {
+        Uri.Builder()
+            .scheme("nuvio")
+            .authority("detail")
+            .appendPath(resolution.contentType)
+            .appendPath(resolution.contentId)
+            .build()
+    } else {
+        Uri.Builder()
+            .scheme("nuvio")
+            .authority("search")
+            .appendQueryParameter("q", item.displayTitle)
+            .appendQueryParameter("open", "detail")
+            .build()
+    }
 
     val packages = listOf("com.nuvio.tv.prefetch4k", "com.nuvio.tv")
     for (packageName in packages) {

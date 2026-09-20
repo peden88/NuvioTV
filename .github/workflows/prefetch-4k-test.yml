@@ -82,6 +82,11 @@ jobs:
           ./gradlew             :app:testFullDebugUnitTest             --tests 'com.nuvio.tv.ui.screens.player.NextEpisodeStreamPrefetchPolicyTest'             --no-daemon             --stacktrace
 
       - name: Build Google TV Streamer 4K APK
+        env:
+          # Keep every rolling test build upgradeable over the previous APK.
+          # The release URL remains unchanged; only the Android package version advances.
+          PREFETCH_TEST_VERSION_CODE: ${{ 200000 + github.run_number }}
+          PREFETCH_TEST_VERSION_NAME: 1.0.0-prefetch4k.${{ github.run_number }}
         run: ./gradlew :app:assembleFullDebug --no-daemon --stacktrace
 
       - name: Verify and normalize APK

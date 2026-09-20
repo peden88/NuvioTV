@@ -14,7 +14,7 @@ android {
         targetSdk = 35
         versionCode = (System.getenv("ANIME_TV_VERSION_CODE") ?: "1").toInt()
         versionName = System.getenv("ANIME_TV_VERSION_NAME") ?: "1.0.0-tv"
-        buildConfigField("String", "ANIME_CALENDAR_BASE_URL", "\"https://anime.peden88.stream\"")
+        buildConfigField("String", "ANIME_CALENDAR_TV_API_BASE_URL", "\"https://sync.peden88.stream\"")
     }
 
     signingConfigs {

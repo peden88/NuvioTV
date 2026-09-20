@@ -83,6 +83,7 @@ data class LayoutSettingsUiState(
     val preferExternalMetaAddonDetail: Boolean = false,
     val hideUnreleasedContent: Boolean = false,
     val showFullReleaseDate: Boolean = true,
+    val autoScrollDescriptionsEnabled: Boolean = false,
     val nextUpFromFurthestEpisode: Boolean = true,
     val showUnairedNextUp: Boolean = true,
     val continueWatchingEnabled: Boolean = true,
@@ -143,6 +144,7 @@ sealed class LayoutSettingsEvent {
     data class SetPreferExternalMetaAddonDetail(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetHideUnreleasedContent(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetShowFullReleaseDate(val enabled: Boolean) : LayoutSettingsEvent()
+    data class SetAutoScrollDescriptionsEnabled(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetNextUpFromFurthestEpisode(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetShowUnairedNextUp(val enabled: Boolean) : LayoutSettingsEvent()
     data class SetContinueWatchingEnabled(val enabled: Boolean) : LayoutSettingsEvent()
@@ -380,6 +382,11 @@ class LayoutSettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            layoutPreferenceDataStore.autoScrollDescriptionsEnabled.distinctUntilChanged().collectLatest { enabled ->
+                updateUiStateIfChanged { it.copy(autoScrollDescriptionsEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
             layoutPreferenceDataStore.nextUpFromFurthestEpisode.collectLatest { enabled ->
                 updateUiStateIfChanged { it.copy(nextUpFromFurthestEpisode = enabled) }
             }
@@ -458,6 +465,7 @@ class LayoutSettingsViewModel @Inject constructor(
             is LayoutSettingsEvent.SetPreferExternalMetaAddonDetail -> setPreferExternalMetaAddonDetail(event.enabled)
             is LayoutSettingsEvent.SetHideUnreleasedContent -> setHideUnreleasedContent(event.enabled)
             is LayoutSettingsEvent.SetShowFullReleaseDate -> setShowFullReleaseDate(event.enabled)
+            is LayoutSettingsEvent.SetAutoScrollDescriptionsEnabled -> setAutoScrollDescriptionsEnabled(event.enabled)
             is LayoutSettingsEvent.SetNextUpFromFurthestEpisode -> setNextUpFromFurthestEpisode(event.enabled)
             is LayoutSettingsEvent.SetShowUnairedNextUp -> setShowUnairedNextUp(event.enabled)
             is LayoutSettingsEvent.SetContinueWatchingEnabled -> setContinueWatchingEnabled(event.enabled)
@@ -827,6 +835,13 @@ class LayoutSettingsViewModel @Inject constructor(
         if (_uiState.value.showFullReleaseDate == enabled) return
         viewModelScope.launch {
             layoutPreferenceDataStore.setShowFullReleaseDate(enabled)
+        }
+    }
+
+    private fun setAutoScrollDescriptionsEnabled(enabled: Boolean) {
+        if (_uiState.value.autoScrollDescriptionsEnabled == enabled) return
+        viewModelScope.launch {
+            layoutPreferenceDataStore.setAutoScrollDescriptionsEnabled(enabled)
         }
     }
 

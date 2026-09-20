@@ -1,117 +1,148 @@
 package com.peden88.animecalendar.tv
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class AnimeCalendarViewModel : ViewModel() {
-    private val api = AnimeCalendarApi()
-    private val _state = MutableStateFlow(AnimeCalendarUiState())
+class AnimeCalendarViewModel(
+    application: Application
+) : AndroidViewModel(application) {
+    private val preferences = application.getSharedPreferences(
+        "anime_calendar_tv",
+        Application.MODE_PRIVATE
+    )
+
+    private val _state = MutableStateFlow(
+        AnimeCalendarUiState(
+            needsConfiguration = savedToken().isBlank(),
+            apiBaseUrl = savedBaseUrl()
+        )
+    )
     val state: StateFlow<AnimeCalendarUiState> = _state.asStateFlow()
 
     init {
-        refresh(initial = true)
+        if (!_state.value.needsConfiguration) {
+            refresh(initial = true)
+        }
+    }
+
+    private fun savedBaseUrl(): String =
+        preferences.getString("api_base_url", BuildConfig.ANIME_CALENDAR_TV_API_BASE_URL)
+            ?.trim()
+            ?.trimEnd('/')
+            ?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.ANIME_CALENDAR_TV_API_BASE_URL
+
+    private fun savedToken(): String =
+        preferences.getString("api_token", "").orEmpty().trim()
+
+    private fun api(): AnimeCalendarApi =
+        AnimeCalendarApi(savedBaseUrl(), savedToken())
+
+    fun saveConnection(baseUrl: String, token: String) {
+        val normalizedUrl = baseUrl.trim().trimEnd('/')
+        val normalizedToken = token.trim()
+
+        preferences.edit()
+            .putString("api_base_url", normalizedUrl)
+            .putString("api_token", normalizedToken)
+            .apply()
+
+        _state.update {
+            it.copy(
+                needsConfiguration = normalizedUrl.isBlank() || normalizedToken.isBlank(),
+                apiBaseUrl = normalizedUrl.ifBlank { BuildConfig.ANIME_CALENDAR_TV_API_BASE_URL },
+                error = null
+            )
+        }
+
+        if (!_state.value.needsConfiguration) {
+            refresh(initial = true)
+        }
+    }
+
+    fun requestConfiguration() {
+        _state.update { it.copy(needsConfiguration = true) }
     }
 
     fun refresh(initial: Boolean = false) {
+        if (savedToken().isBlank()) {
+            _state.update {
+                it.copy(
+                    loading = false,
+                    refreshing = false,
+                    needsConfiguration = true
+                )
+            }
+            return
+        }
+
         viewModelScope.launch {
             _state.update {
                 it.copy(
                     loading = initial && it.watchlist.isEmpty() && it.calendar.isEmpty(),
                     refreshing = !initial,
-                    error = null
+                    error = null,
+                    needsConfiguration = false
                 )
             }
 
-            val results = listOf(
-                async { runCatching { api.watchlist() } },
-                async { runCatching { api.calendar() } },
-                async { runCatching { api.upcoming() } },
-                async { runCatching { api.currentSeason() } }
-            ).awaitAll()
-
-            val watchlistResult = results[0]
-            val calendarResult = results[1]
-            val upcomingResult = results[2]
-            val currentResult = results[3]
-            val successful = results.count { it.isSuccess }
-
-            if (successful == 0) {
-                _state.update {
-                    it.copy(
-                        loading = false,
-                        refreshing = false,
-                        error = results.firstNotNullOfOrNull { result -> result.exceptionOrNull()?.message }
-                            ?: "Could not reach Anime Calendar"
-                    )
+            runCatching { api().bootstrap() }
+                .onSuccess { snapshot ->
+                    val watchlistIds = snapshot.watchlist.mapTo(mutableSetOf()) { it.anilistId }
+                    _state.update {
+                        it.copy(
+                            watchlist = snapshot.watchlist,
+                            calendar = snapshot.calendar,
+                            upcoming = snapshot.upcoming,
+                            currentSeason = snapshot.currentSeason,
+                            watchlistIds = watchlistIds,
+                            resolutions = snapshot.resolutions,
+                            loading = false,
+                            refreshing = false,
+                            needsConfiguration = false,
+                            apiBaseUrl = savedBaseUrl(),
+                            error = null
+                        )
+                    }
                 }
-                return@launch
-            }
-
-            val watchlist = watchlistResult.getOrElse { emptyList() }
-            val watchlistIds = watchlist.mapTo(mutableSetOf()) { it.anilistId }
-            fun mark(items: List<AnimeItem>) = items.map { item ->
-                item.copy(selected = item.anilistId in watchlistIds || item.selected)
-            }
-
-            _state.update {
-                it.copy(
-                    watchlist = mark(watchlist).sortedBy { item -> item.displayTitle.lowercase() },
-                    calendar = mark(calendarResult.getOrElse { emptyList() }),
-                    upcoming = mark(upcomingResult.getOrElse { emptyList() }),
-                    currentSeason = mark(currentResult.getOrElse { emptyList() }),
-                    watchlistIds = watchlistIds,
-                    loading = false,
-                    refreshing = false,
-                    error = if (successful < results.size) "Some sections could not be refreshed" else null
-                )
-            }
+                .onFailure { error ->
+                    _state.update {
+                        it.copy(
+                            loading = false,
+                            refreshing = false,
+                            error = error.message ?: "Could not reach Anime Calendar TV API"
+                        )
+                    }
+                }
         }
     }
 
     fun toggleWatchlist(item: AnimeItem) {
         val id = item.anilistId
-        val adding = id !in _state.value.watchlistIds
         if (id in _state.value.mutatingIds) return
 
         viewModelScope.launch {
             _state.update { it.copy(mutatingIds = it.mutatingIds + id, error = null) }
-            val success = runCatching { api.setWatchlisted(id, adding) }.getOrDefault(false)
+            val success = runCatching { api().toggleWatchlist(id) }.getOrDefault(false)
+
             if (!success) {
                 _state.update {
                     it.copy(
                         mutatingIds = it.mutatingIds - id,
-                        error = if (adding) "Could not add ${item.displayTitle}" else "Could not remove ${item.displayTitle}"
+                        error = "Could not update ${item.displayTitle}"
                     )
                 }
                 return@launch
             }
 
-            val selectedIds = if (adding) _state.value.watchlistIds + id else _state.value.watchlistIds - id
-            fun mark(items: List<AnimeItem>) = items.map { candidate ->
-                if (candidate.anilistId == id) candidate.copy(selected = adding) else candidate
-            }
-            _state.update {
-                val nextWatchlist = if (adding) {
-                    (it.watchlist + item.copy(selected = true)).distinctBy(AnimeItem::anilistId)
-                } else {
-                    it.watchlist.filterNot { candidate -> candidate.anilistId == id }
-                }
-                it.copy(
-                    watchlist = nextWatchlist.sortedBy { candidate -> candidate.displayTitle.lowercase() },
-                    calendar = mark(it.calendar),
-                    upcoming = mark(it.upcoming),
-                    currentSeason = mark(it.currentSeason),
-                    watchlistIds = selectedIds,
-                    mutatingIds = it.mutatingIds - id
-                )
-            }
+            _state.update { it.copy(mutatingIds = it.mutatingIds - id) }
+            refresh()
         }
     }
 }

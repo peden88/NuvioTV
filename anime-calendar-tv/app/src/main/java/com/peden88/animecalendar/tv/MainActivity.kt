@@ -30,9 +30,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -131,8 +128,6 @@ private fun AnimeCalendarTvApp(
             } else {
                 when (selectedTab) {
                     CalendarTab.WATCHLIST -> AnimeGrid(
-                        title = "Watching",
-                        subtitle = "Titles selected in Anime Calendar",
                         items = state.watchlist,
                         watchlistIds = state.watchlistIds,
                         mutatingIds = state.mutatingIds,
@@ -148,8 +143,6 @@ private fun AnimeCalendarTvApp(
                         onLongPress = { actionItem = it }
                     )
                     CalendarTab.UPCOMING -> AnimeGrid(
-                        title = "Upcoming",
-                        subtitle = "Upcoming anime and scheduled releases",
                         items = state.upcoming,
                         showStartDate = true,
                         watchlistIds = state.watchlistIds,
@@ -332,8 +325,6 @@ private fun TvNavButton(
 
 @Composable
 private fun AnimeGrid(
-    title: String,
-    subtitle: String,
     items: List<AnimeItem>,
     showStartDate: Boolean = false,
     watchlistIds: Set<Int>,
@@ -342,24 +333,27 @@ private fun AnimeGrid(
     onOpen: (AnimeItem) -> Unit,
     onLongPress: (AnimeItem) -> Unit
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 30.dp, vertical = 20.dp)
+            .padding(vertical = 14.dp)
     ) {
-        SectionTitle(title, subtitle)
-        Spacer(Modifier.height(16.dp))
-
         if (items.isEmpty()) {
-            EmptyMessage(emptyMessage)
+            Box(Modifier.padding(horizontal = 18.dp)) {
+                EmptyMessage(emptyMessage)
+            }
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 185.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-                modifier = Modifier.fillMaxSize()
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopStart),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(items, key = { "${it.anilistId}:${it.episodeNumber ?: -1}:${it.airingAtEpochSeconds ?: -1}" }) { item ->
+                items(
+                    items,
+                    key = { "${it.anilistId}:${it.episodeNumber ?: -1}:${it.airingAtEpochSeconds ?: -1}" }
+                ) { item ->
                     AnimeCard(
                         item = item,
                         isWatchlisted = item.anilistId in watchlistIds,
@@ -388,57 +382,61 @@ private fun CalendarSection(
             .groupBy(::calendarDayKey)
     }
 
+    if (grouped.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 18.dp, vertical = 14.dp)
+        ) {
+            EmptyMessage("No calendar entries are available.")
+        }
+        return
+    }
+
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
-            Box(Modifier.padding(horizontal = 30.dp)) {
-                SectionTitle("Calendar", "Airing schedule from your Anime Calendar")
-            }
-        }
-
-        if (grouped.isEmpty()) {
-            item {
-                Box(Modifier.padding(horizontal = 30.dp)) {
-                    EmptyMessage("No calendar entries are available.")
-                }
-            }
-        }
-
         grouped.forEach { (dayKey, dayItems) ->
             val dayLabel = calendarDayLabel(dayItems.firstOrNull(), dayKey)
-            item(key = "header:$dayKey") {
-                Text(
-                    text = dayLabel,
-                    modifier = Modifier.padding(horizontal = 30.dp),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            item(key = "row:$dayKey") {
-                LazyRow(
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 30.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+            item(key = "day:$dayKey") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(396.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(dayItems, key = { "${it.anilistId}:${it.episodeNumber ?: -1}" }) { item ->
-                        AnimeCard(
-                            item = item,
-                            isWatchlisted = item.anilistId in watchlistIds,
-                            busy = item.anilistId in mutatingIds,
-                            onClick = { onOpen(item) },
-                            onLongPress = { onLongPress(item) },
-                            compact = true,
-                            scheduleOverride = calendarTimeLabel(item)
-                        )
+                    Text(
+                        text = dayLabel,
+                        modifier = Modifier.padding(horizontal = 18.dp),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    LazyRow(
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(
+                            dayItems,
+                            key = { "${it.anilistId}:${it.episodeNumber ?: -1}" }
+                        ) { item ->
+                            AnimeCard(
+                                item = item,
+                                isWatchlisted = item.anilistId in watchlistIds,
+                                busy = item.anilistId in mutatingIds,
+                                onClick = { onOpen(item) },
+                                onLongPress = { onLongPress(item) },
+                                compact = true,
+                                scheduleOverride = calendarTimeLabel(item)
+                            )
+                        }
                     }
                 }
             }
         }
-        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
@@ -452,18 +450,11 @@ private fun BrowseSection(
     onLongPress: (AnimeItem) -> Unit
 ) {
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
-            Box(Modifier.padding(horizontal = 30.dp)) {
-                SectionTitle("Browse", "Current and upcoming seasons")
-            }
-        }
-
-        item {
+        item(key = "browse-current") {
             BrowseRow(
                 heading = "Current season",
                 items = current,
@@ -474,7 +465,7 @@ private fun BrowseSection(
             )
         }
 
-        item {
+        item(key = "browse-upcoming") {
             BrowseRow(
                 heading = "Upcoming season",
                 items = upcoming,
@@ -484,8 +475,6 @@ private fun BrowseSection(
                 onLongPress = onLongPress
             )
         }
-
-        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
@@ -498,22 +487,27 @@ private fun BrowseRow(
     onOpen: (AnimeItem) -> Unit,
     onLongPress: (AnimeItem) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(396.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         Text(
             text = heading,
-            modifier = Modifier.padding(horizontal = 30.dp),
-            fontSize = 19.sp,
+            modifier = Modifier.padding(horizontal = 18.dp),
+            fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
             color = Color.White
         )
         if (items.isEmpty()) {
-            Box(Modifier.padding(horizontal = 30.dp)) {
+            Box(Modifier.padding(horizontal = 18.dp)) {
                 Text("Nothing returned for this season.", color = Color.White.copy(alpha = 0.6f))
             }
         } else {
             LazyRow(
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 30.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(items, key = { it.anilistId }) { item ->
                     AnimeCard(
@@ -527,23 +521,6 @@ private fun BrowseRow(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SectionTitle(title: String, subtitle: String) {
-    Column {
-        Text(
-            text = title,
-            color = Color.White,
-            fontSize = 27.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = subtitle,
-            color = Color.White.copy(alpha = 0.62f),
-            fontSize = 14.sp
-        )
     }
 }
 
@@ -572,13 +549,15 @@ private fun AnimeCard(
 ) {
     var focused by remember { mutableStateOf(false) }
     var longPressFired by remember { mutableStateOf(false) }
-    val width = if (compact) 174.dp else 188.dp
-    val posterHeight = if (compact) 245.dp else 264.dp
+    val width = if (compact) 148.dp else 156.dp
+    val posterHeight = if (compact) 204.dp else 216.dp
+    val cardHeight = if (compact) 322.dp else 342.dp
     val shape = RoundedCornerShape(13.dp)
 
     Column(
         modifier = Modifier
             .width(width)
+            .height(cardHeight)
             .clip(shape)
             .background(if (focused) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.045f))
             .then(
@@ -637,12 +616,12 @@ private fun AnimeCard(
                         .padding(7.dp)
                         .clip(RoundedCornerShape(999.dp))
                         .background(Color(0xDD171922))
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Watching", color = Color.White, fontSize = 11.sp)
+                    Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(13.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("Watching", color = Color.White, fontSize = 10.sp)
                 }
             }
             if (busy) {
@@ -666,7 +645,9 @@ private fun AnimeCard(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
-                    modifier = Modifier.padding(start = 5.dp, top = 8.dp, end = 5.dp)
+                    modifier = Modifier
+                        .height(24.dp)
+                        .padding(start = 5.dp, top = 7.dp, end = 5.dp)
                 )
             }
 
@@ -676,7 +657,12 @@ private fun AnimeCard(
             fontWeight = if (focused) FontWeight.Bold else FontWeight.Medium,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 5.dp, vertical = 8.dp)
+            fontSize = 13.sp,
+            lineHeight = 16.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .padding(horizontal = 5.dp, vertical = 6.dp)
         )
 
         val meta = buildList {
@@ -684,24 +670,29 @@ private fun AnimeCard(
             item.year?.let { add(it.toString()) }
             item.episodeNumber?.let { add("Ep $it") }
         }.joinToString(" · ")
-        if (meta.isNotBlank()) {
-            Text(
-                text = meta,
-                color = Color.White.copy(alpha = 0.55f),
-                fontSize = 12.sp,
-                maxLines = 1,
-                modifier = Modifier.padding(horizontal = 5.dp, vertical = 0.dp)
-            )
-        }
+        Text(
+            text = meta.ifBlank { " " },
+            color = Color.White.copy(alpha = 0.55f),
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(20.dp)
+                .padding(horizontal = 5.dp)
+        )
 
         if (showStartDate) {
             Text(
                 text = formatStartDate(item.startDateLabel),
                 color = MaterialTheme.colorScheme.secondary,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(22.dp)
+                    .padding(horizontal = 5.dp, vertical = 3.dp)
             )
         }
 
@@ -712,10 +703,13 @@ private fun AnimeCard(
                     Text(
                         text = schedule,
                         color = MaterialTheme.colorScheme.primary,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(22.dp)
+                            .padding(horizontal = 5.dp, vertical = 3.dp)
                     )
                 }
         }

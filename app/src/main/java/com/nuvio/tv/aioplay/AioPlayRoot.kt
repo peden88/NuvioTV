@@ -18,9 +18,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
@@ -72,6 +74,8 @@ import org.json.JSONObject
 private const val HOME_ROUTE = "aioplay_home"
 private const val SETTINGS_ROUTE = "aioplay_settings"
 private const val ACCOUNT_ROUTE = "aioplay_account"
+private const val SERIES_ROUTE =
+    "aioplay_series?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}"
 private const val LOADING_ROUTE =
     "aioplay_loading?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}&contentType={contentType}&sessionId={sessionId}"
 private const val PLAYER_ROUTE =
@@ -92,6 +96,13 @@ private fun loadingRoute(
         "&backdrop=" + encode(item.background) +
         "&contentType=" + encode(contentType) +
         "&sessionId=" + encode(sessionId)
+
+private fun seriesRoute(item: AioPlayItem): String =
+    "aioplay_series" +
+        "?itemId=" + encode(item.id) +
+        "&title=" + encode(item.name) +
+        "&poster=" + encode(item.poster) +
+        "&backdrop=" + encode(item.background)
 
 private fun playerRoute(
     item: AioPlayItem,
@@ -252,17 +263,29 @@ private fun AioPlaySignedInApp(
         composable(HOME_ROUTE) {
             AioPlayHomeScreen(
                 state = state,
+                onSection = viewModel::selectSection,
                 onCatalog = viewModel::selectCatalog,
                 onRefresh = viewModel::refreshCurrentCatalog,
-                onPlay = { item ->
-                    val contentType = if (
-                        state.selectedCatalogId == "nuvio_sports_channels"
-                    ) {
-                        "live_channel"
-                    } else {
-                        "sport_event"
+                onItem = { item ->
+                    when (state.selectedSection) {
+                        AioPlaySection.LIVE -> {
+                            val contentType = if (
+                                state.selectedCatalogId
+                                    ?.startsWith("nuvio_sports_channel_") == true
+                            ) {
+                                "live_channel"
+                            } else {
+                                "sport_event"
+                            }
+                            navController.navigate(loadingRoute(item, contentType))
+                        }
+                        AioPlaySection.MOVIES -> {
+                            navController.navigate(loadingRoute(item, "movie"))
+                        }
+                        AioPlaySection.SERIES -> {
+                            navController.navigate(seriesRoute(item))
+                        }
                     }
-                    navController.navigate(loadingRoute(item, contentType))
                 },
                 onSettings = { navController.navigate(SETTINGS_ROUTE) },
                 onAccount = { navController.navigate(ACCOUNT_ROUTE) }
@@ -281,6 +304,34 @@ private fun AioPlaySignedInApp(
                 vodEnabled = state.capabilities?.vodEnabled == true,
                 onBack = { navController.popBackStack() },
                 onSignOut = viewModel::signOut
+            )
+        }
+
+        composable(
+            route = SERIES_ROUTE,
+            arguments = listOf(
+                navArgument("itemId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                navArgument("poster") { type = NavType.StringType; defaultValue = "" },
+                navArgument("backdrop") { type = NavType.StringType; defaultValue = "" }
+            )
+        ) { entry ->
+            val series = AioPlayItem(
+                id = entry.arguments?.getString("itemId").orEmpty(),
+                type = "series",
+                name = entry.arguments?.getString("title").orEmpty(),
+                description = null,
+                poster = entry.arguments?.getString("poster")?.takeIf { it.isNotBlank() },
+                background = entry.arguments?.getString("backdrop")?.takeIf { it.isNotBlank() },
+                logo = null
+            )
+            AioPlaySeriesScreen(
+                series = series,
+                viewModel = viewModel,
+                onEpisode = { episode ->
+                    navController.navigate(loadingRoute(episode, "episode"))
+                },
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -389,9 +440,10 @@ private fun AioPlaySignedInApp(
 @Composable
 private fun AioPlayHomeScreen(
     state: AioPlayUiState,
+    onSection: (AioPlaySection) -> Unit,
     onCatalog: (AioPlayCatalog) -> Unit,
     onRefresh: () -> Unit,
-    onPlay: (AioPlayItem) -> Unit,
+    onItem: (AioPlayItem) -> Unit,
     onSettings: () -> Unit,
     onAccount: () -> Unit
 ) {
@@ -402,39 +454,44 @@ private fun AioPlayHomeScreen(
     ) {
         Column(
             modifier = Modifier
-                .width(235.dp)
+                .width(205.dp)
                 .fillMaxHeight()
                 .background(NuvioTheme.colors.BackgroundElevated)
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.aioplay_brand),
                 contentDescription = "AIOPlay",
                 modifier = Modifier
-                    .width(86.dp)
+                    .width(66.dp)
                     .aspectRatio(1f)
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 4.dp),
+                    .align(Alignment.CenterHorizontally),
                 contentScale = ContentScale.Fit
             )
             Text(
                 text = "AIOPlay",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 color = NuvioTheme.colors.TextPrimary,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp)
+                modifier = Modifier.padding(horizontal = 7.dp, vertical = 7.dp)
             )
 
-            state.catalogs.forEach { catalog ->
-                AioPlayNavCard(
-                    text = catalog.name,
-                    selected = state.selectedCatalogId == catalog.id,
-                    onClick = { onCatalog(catalog) }
-                )
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(state.catalogs, key = { it.id }) { catalog ->
+                    AioPlayNavCard(
+                        text = catalog.name,
+                        selected = state.selectedCatalogId == catalog.id,
+                        onClick = { onCatalog(catalog) }
+                    )
+                }
             }
-
-            Spacer(modifier = Modifier.weight(1f))
 
             AioPlayNavCard(
                 text = "Playback Settings",
@@ -452,38 +509,60 @@ private fun AioPlayHomeScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .padding(horizontal = 28.dp, vertical = 22.dp)
+                .padding(horizontal = 24.dp, vertical = 18.dp)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (state.capabilities?.sportsEnabled == true) {
+                    AioPlaySectionCard(
+                        text = "Live",
+                        selected = state.selectedSection == AioPlaySection.LIVE,
+                        onClick = { onSection(AioPlaySection.LIVE) }
+                    )
+                }
+                if (state.capabilities?.vodEnabled == true) {
+                    Spacer(modifier = Modifier.width(10.dp))
+                    AioPlaySectionCard(
+                        text = "Series",
+                        selected = state.selectedSection == AioPlaySection.SERIES,
+                        onClick = { onSection(AioPlaySection.SERIES) }
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    AioPlaySectionCard(
+                        text = "Movies",
+                        selected = state.selectedSection == AioPlaySection.MOVIES,
+                        onClick = { onSection(AioPlaySection.MOVIES) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
             val title = state.catalogs
                 .firstOrNull { it.id == state.selectedCatalogId }
                 ?.name
-                ?: "Sports"
+                ?: state.selectedSection.label
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = NuvioTheme.colors.TextPrimary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    if (state.capabilities?.vodEnabled == true) {
-                        Text(
-                            text = "VOD services connected",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = NuvioTheme.colors.TextSecondary
-                        )
-                    }
-                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioTheme.colors.TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
                 Button(onClick = onRefresh) {
                     Text("Refresh")
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             when {
                 state.loadingCatalog -> {
@@ -506,22 +585,73 @@ private fun AioPlayHomeScreen(
                     }
                 }
                 else -> {
+                    val posterMode = state.selectedSection != AioPlaySection.LIVE
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 245.dp),
+                        columns = GridCells.Adaptive(
+                            minSize = if (posterMode) 190.dp else 245.dp
+                        ),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 30.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalArrangement = Arrangement.spacedBy(18.dp)
                     ) {
-                        items(state.items, key = { it.id }) { item ->
+                        gridItems(state.items, key = { it.id }) { item ->
                             AioPlayContentCard(
                                 item = item,
-                                onClick = { onPlay(item) }
+                                posterMode = posterMode,
+                                onClick = { onItem(item) }
                             )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AioPlaySectionCard(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Card(
+        onClick = onClick,
+        modifier = Modifier.width(132.dp),
+        shape = CardDefaults.shape(shape = shape),
+        colors = CardDefaults.colors(
+            containerColor = if (selected) {
+                NuvioTheme.colors.Secondary
+            } else {
+                NuvioTheme.colors.BackgroundCard
+            },
+            focusedContainerColor = NuvioTheme.colors.FocusBackground
+        ),
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = NuvioTheme.focusRing.border(2.dp),
+                shape = shape
+            )
+        ),
+        scale = CardDefaults.scale(focusedScale = 1.04f)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.titleSmall,
+                color = if (selected) {
+                    NuvioTheme.colors.OnSecondary
+                } else {
+                    NuvioTheme.colors.TextPrimary
+                },
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }
@@ -559,7 +689,7 @@ private fun AioPlayNavCard(
             color = if (selected) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.TextPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp)
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp)
         )
     }
 }
@@ -567,6 +697,7 @@ private fun AioPlayNavCard(
 @Composable
 private fun AioPlayContentCard(
     item: AioPlayItem,
+    posterMode: Boolean,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(12.dp)
@@ -574,7 +705,7 @@ private fun AioPlayContentCard(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(16f / 9f),
+            .aspectRatio(if (posterMode) 2f / 3f else 16f / 9f),
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
             containerColor = NuvioTheme.colors.BackgroundCard,
@@ -594,7 +725,11 @@ private fun AioPlayContentCard(
                 .clip(shape)
                 .background(NuvioTheme.colors.BackgroundCard)
         ) {
-            val image = item.background ?: item.poster
+            val image = if (posterMode) {
+                item.poster ?: item.background
+            } else {
+                item.background ?: item.poster
+            }
             if (!image.isNullOrBlank()) {
                 AsyncImage(
                     model = image,
@@ -611,8 +746,8 @@ private fun AioPlayContentCard(
                         Brush.verticalGradient(
                             listOf(
                                 Color.Transparent,
-                                Color.Black.copy(alpha = 0.24f),
-                                Color.Black.copy(alpha = 0.88f)
+                                Color.Black.copy(alpha = if (posterMode) 0.08f else 0.24f),
+                                Color.Black.copy(alpha = 0.9f)
                             )
                         )
                     )
@@ -622,17 +757,21 @@ private fun AioPlayContentCard(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .padding(14.dp)
+                    .padding(if (posterMode) 12.dp else 14.dp)
             ) {
                 Text(
                     text = item.name,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = if (posterMode) {
+                        MaterialTheme.typography.titleSmall
+                    } else {
+                        MaterialTheme.typography.titleMedium
+                    },
                     color = Color.White,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (!item.description.isNullOrBlank()) {
+                if (!posterMode && !item.description.isNullOrBlank()) {
                     Text(
                         text = item.description.lineSequence().firstOrNull().orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
@@ -640,6 +779,122 @@ private fun AioPlayContentCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlaySeriesScreen(
+    series: AioPlayItem,
+    viewModel: AioPlayViewModel,
+    onEpisode: (AioPlayItem) -> Unit,
+    onBack: () -> Unit
+) {
+    BackHandler(onBack = onBack)
+    var details by remember(series.id) { mutableStateOf<AioPlayMetaDetails?>(null) }
+    var loading by remember(series.id) { mutableStateOf(true) }
+    var error by remember(series.id) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(series.id) {
+        loading = true
+        error = null
+        viewModel.loadVodMeta("series", series.id)
+            .onSuccess { details = it }
+            .onFailure { error = it.message ?: "Series details could not be loaded." }
+        loading = false
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NuvioTheme.colors.Background)
+            .padding(28.dp)
+    ) {
+        val artwork = details?.item?.poster ?: series.poster
+        if (!artwork.isNullOrBlank()) {
+            AsyncImage(
+                model = artwork,
+                contentDescription = series.name,
+                modifier = Modifier
+                    .width(210.dp)
+                    .aspectRatio(2f / 3f)
+                    .clip(RoundedCornerShape(14.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.width(28.dp))
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+        ) {
+            Text(
+                text = details?.item?.name ?: series.name,
+                style = MaterialTheme.typography.headlineMedium,
+                color = NuvioTheme.colors.TextPrimary,
+                fontWeight = FontWeight.SemiBold
+            )
+            details?.item?.description?.takeIf { it.isNotBlank() }?.let { description ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioTheme.colors.TextSecondary,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.height(18.dp))
+
+            when {
+                loading -> AioPlayLoadingLabel("Loading episodes…")
+                error != null -> Text(
+                    text = error.orEmpty(),
+                    color = NuvioTheme.colors.Error
+                )
+                details?.videos.isNullOrEmpty() -> Text(
+                    text = "No episodes are available.",
+                    color = NuvioTheme.colors.TextSecondary
+                )
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp)
+                    ) {
+                        items(details!!.videos, key = { it.id }) { video ->
+                            val label = buildString {
+                                if (video.season != null && video.episode != null) {
+                                    append("S")
+                                    append(video.season.toString().padStart(2, '0'))
+                                    append("E")
+                                    append(video.episode.toString().padStart(2, '0'))
+                                    append("  ")
+                                }
+                                append(video.title)
+                            }
+                            AioPlayNavCard(
+                                text = label,
+                                selected = false,
+                                onClick = {
+                                    onEpisode(
+                                        AioPlayItem(
+                                            id = video.id,
+                                            type = "series",
+                                            name = video.title,
+                                            description = null,
+                                            poster = details?.item?.poster ?: series.poster,
+                                            background = details?.item?.background ?: series.background,
+                                            logo = null
+                                        )
+                                    )
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }

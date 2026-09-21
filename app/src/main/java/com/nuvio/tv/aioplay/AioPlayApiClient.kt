@@ -446,8 +446,8 @@ class AioPlayApiClient @Inject constructor(
             }
             is String -> value
                 .split(',')
-                .map(String::trim)
-                .filter(String::isNotBlank)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
             else -> emptyList()
         }
     }

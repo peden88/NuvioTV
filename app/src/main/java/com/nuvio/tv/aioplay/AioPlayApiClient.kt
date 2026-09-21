@@ -2,6 +2,15 @@ package com.nuvio.tv.aioplay
 
 import android.os.Build
 import com.nuvio.tv.BuildConfig
+import com.nuvio.tv.domain.model.ContentType
+import com.nuvio.tv.domain.model.Meta
+import com.nuvio.tv.domain.model.MetaBehaviorHints
+import com.nuvio.tv.domain.model.MetaCastMember
+import com.nuvio.tv.domain.model.MetaCompany
+import com.nuvio.tv.domain.model.MetaLink
+import com.nuvio.tv.domain.model.MetaTrailer
+import com.nuvio.tv.domain.model.PosterShape
+import com.nuvio.tv.domain.model.Video
 import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Named
@@ -12,6 +21,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 
 private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
@@ -233,40 +243,111 @@ class AioPlayApiClient @Inject constructor(
             "/api/v1/vod/meta/" + encodePath(safeType) + "/" + encodePath(id),
             token = token
         )
-        val meta = json.optJSONObject("meta")
+        val metaJson = json.optJSONObject("meta")
             ?: throw AioPlayApiException("The server returned no metadata.")
-        val item = parseItem(meta, safeType)
+        val item = parseItem(metaJson, safeType)
             ?: throw AioPlayApiException("The server returned incomplete metadata.")
 
-        val videos = buildList {
-            val rows = meta.optJSONArray("videos")
+        val domainVideos = buildList {
+            val rows = metaJson.optJSONArray("videos")
             if (rows != null) {
                 for (i in 0 until rows.length()) {
                     val video = rows.optJSONObject(i) ?: continue
                     val videoId = video.optString("id")
                     if (videoId.isBlank()) continue
-                    val season = video.optInt("season").takeIf { video.has("season") }
-                    val episode = video.optInt("episode").takeIf { video.has("episode") }
+                    val season = video.optNullableInt("season")
+                    val episode = video.optNullableInt("episode")
                     val title = video.optString("title")
                         .ifBlank { video.optString("name") }
                         .ifBlank {
                             if (episode != null && episode > 0) "Episode $episode" else "Episode"
                         }
                     add(
-                        AioPlayVideo(
+                        Video(
                             id = videoId,
                             title = title,
+                            released = video.optNonBlankString("released"),
+                            thumbnail = video.optNonBlankString("thumbnail")
+                                ?: video.optNonBlankString("poster"),
                             season = season,
-                            episode = episode
+                            episode = episode,
+                            overview = video.optNonBlankString("overview")
+                                ?: video.optNonBlankString("description"),
+                            runtime = video.optNullableInt("runtime"),
+                            rating = video.optNullableDouble("rating"),
+                            available = video.optNullableBoolean("available")
                         )
                     )
                 }
             }
         }.sortedWith(
-            compareBy<AioPlayVideo> { it.season ?: 0 }
+            compareBy<Video> { it.season ?: 0 }
                 .thenBy { it.episode ?: 0 }
         )
-        return AioPlayMetaDetails(item = item, videos = videos)
+
+        val videos = domainVideos.map { video ->
+            AioPlayVideo(
+                id = video.id,
+                title = video.title,
+                season = video.season,
+                episode = video.episode,
+                released = video.released,
+                thumbnail = video.thumbnail,
+                overview = video.overview,
+                runtime = video.runtime,
+                rating = video.rating
+            )
+        }
+
+        val richMeta = Meta(
+            id = item.id,
+            type = ContentType.fromString(safeType),
+            rawType = safeType,
+            name = item.name,
+            poster = item.poster,
+            posterShape = PosterShape.fromString(metaJson.optNonBlankString("posterShape")),
+            background = item.background,
+            logo = item.logo,
+            description = item.description,
+            releaseInfo = metaJson.optNonBlankString("releaseInfo")
+                ?: metaJson.optNonBlankString("year"),
+            status = metaJson.optNonBlankString("status"),
+            imdbRating = metaJson.optNullableDouble("imdbRating")?.toFloat(),
+            genres = metaJson.stringList("genres"),
+            runtime = metaJson.optNonBlankString("runtime"),
+            director = metaJson.stringList("director"),
+            writer = metaJson.stringList("writer"),
+            cast = metaJson.stringList("cast"),
+            castMembers = metaJson.castMembers(),
+            videos = domainVideos,
+            productionCompanies = metaJson.companies("productionCompanies"),
+            networks = metaJson.companies("networks"),
+            ageRating = metaJson.optNonBlankString("ageRating"),
+            country = metaJson.optNonBlankString("country"),
+            awards = metaJson.optNonBlankString("awards"),
+            language = metaJson.optNonBlankString("language"),
+            links = metaJson.metaLinks(),
+            trailerYtIds = metaJson.stringList("trailerYtIds"),
+            imdbId = metaJson.optNonBlankString("imdbId"),
+            slug = metaJson.optNonBlankString("slug"),
+            released = metaJson.optNonBlankString("released"),
+            landscapePoster = metaJson.optNonBlankString("landscapePoster"),
+            rawPosterUrl = metaJson.optNonBlankString("rawPosterUrl"),
+            behaviorHints = metaJson.behaviorHints(),
+            trailers = metaJson.trailers(),
+            hasPoster = metaJson.optNullableBoolean("hasPoster"),
+            hasBackground = metaJson.optNullableBoolean("hasBackground"),
+            hasLandscapePoster = metaJson.optNullableBoolean("hasLandscapePoster"),
+            hasLogo = metaJson.optNullableBoolean("hasLogo"),
+            hasLinks = metaJson.optNullableBoolean("hasLinks"),
+            hasVideos = metaJson.optNullableBoolean("hasVideos")
+        )
+
+        return AioPlayMetaDetails(
+            item = item,
+            videos = videos,
+            meta = richMeta
+        )
     }
 
     suspend fun startPlayback(
@@ -312,6 +393,150 @@ class AioPlayApiClient @Inject constructor(
             throw AioPlayApiException("VOD type must be movie or series.")
         }
         return value
+    }
+
+    private fun JSONObject.optNonBlankString(key: String): String? =
+        optString(key).trim().takeIf { it.isNotBlank() && it != "null" }
+
+    private fun JSONObject.optNullableInt(key: String): Int? {
+        if (!has(key) || isNull(key)) return null
+        val value = opt(key)
+        return when (value) {
+            is Number -> value.toInt()
+            is String -> value.trim().toIntOrNull()
+            else -> null
+        }
+    }
+
+    private fun JSONObject.optNullableDouble(key: String): Double? {
+        if (!has(key) || isNull(key)) return null
+        val value = opt(key)
+        val parsed = when (value) {
+            is Number -> value.toDouble()
+            is String -> value.trim().toDoubleOrNull()
+            else -> null
+        }
+        return parsed?.takeIf { it.isFinite() }
+    }
+
+    private fun JSONObject.optNullableBoolean(key: String): Boolean? {
+        if (!has(key) || isNull(key)) return null
+        return when (val value = opt(key)) {
+            is Boolean -> value
+            is Number -> value.toInt() != 0
+            is String -> when (value.trim().lowercase()) {
+                "true", "1", "yes", "on" -> true
+                "false", "0", "no", "off" -> false
+                else -> null
+            }
+            else -> null
+        }
+    }
+
+    private fun JSONObject.stringList(key: String): List<String> {
+        val value = opt(key)
+        return when (value) {
+            is JSONArray -> buildList {
+                for (i in 0 until value.length()) {
+                    when (val entry = value.opt(i)) {
+                        is String -> entry.trim().takeIf { it.isNotBlank() }?.let(::add)
+                        is JSONObject -> entry.optNonBlankString("name")?.let(::add)
+                    }
+                }
+            }
+            is String -> value
+                .split(',')
+                .map(String::trim)
+                .filter(String::isNotBlank)
+            else -> emptyList()
+        }
+    }
+
+    private fun JSONObject.castMembers(): List<MetaCastMember> {
+        val value = optJSONArray("castMembers") ?: return emptyList()
+        return buildList {
+            for (i in 0 until value.length()) {
+                val row = value.optJSONObject(i) ?: continue
+                val name = row.optNonBlankString("name") ?: continue
+                add(
+                    MetaCastMember(
+                        name = name,
+                        character = row.optNonBlankString("character"),
+                        photo = row.optNonBlankString("photo")
+                            ?: row.optNonBlankString("profilePath"),
+                        tmdbId = row.optNullableInt("tmdbId") ?: row.optNullableInt("id")
+                    )
+                )
+            }
+        }
+    }
+
+    private fun JSONObject.companies(key: String): List<MetaCompany> {
+        val value = optJSONArray(key) ?: return emptyList()
+        return buildList {
+            for (i in 0 until value.length()) {
+                when (val row = value.opt(i)) {
+                    is String -> row.trim().takeIf { it.isNotBlank() }?.let {
+                        add(MetaCompany(name = it))
+                    }
+                    is JSONObject -> {
+                        val name = row.optNonBlankString("name") ?: continue
+                        add(
+                            MetaCompany(
+                                name = name,
+                                logo = row.optNonBlankString("logo")
+                                    ?: row.optNonBlankString("logoPath"),
+                                tmdbId = row.optNullableInt("tmdbId") ?: row.optNullableInt("id")
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun JSONObject.metaLinks(): List<MetaLink> {
+        val value = optJSONArray("links") ?: return emptyList()
+        return buildList {
+            for (i in 0 until value.length()) {
+                val row = value.optJSONObject(i) ?: continue
+                val url = row.optNonBlankString("url") ?: continue
+                add(
+                    MetaLink(
+                        name = row.optNonBlankString("name").orEmpty(),
+                        category = row.optNonBlankString("category").orEmpty(),
+                        url = url
+                    )
+                )
+            }
+        }
+    }
+
+    private fun JSONObject.trailers(): List<MetaTrailer> {
+        val value = optJSONArray("trailers") ?: return emptyList()
+        return buildList {
+            for (i in 0 until value.length()) {
+                val row = value.optJSONObject(i) ?: continue
+                add(
+                    MetaTrailer(
+                        source = row.optNonBlankString("source"),
+                        type = row.optNonBlankString("type"),
+                        name = row.optNonBlankString("name"),
+                        ytId = row.optNonBlankString("ytId")
+                            ?: row.optNonBlankString("youtubeId"),
+                        lang = row.optNonBlankString("lang")
+                    )
+                )
+            }
+        }
+    }
+
+    private fun JSONObject.behaviorHints(): MetaBehaviorHints? {
+        val row = optJSONObject("behaviorHints") ?: return null
+        return MetaBehaviorHints(
+            defaultVideoId = row.optNonBlankString("defaultVideoId"),
+            hasScheduledVideos = row.optNullableBoolean("hasScheduledVideos")
+        )
     }
 
     private fun parseItems(json: JSONObject, fallbackType: String): List<AioPlayItem> {

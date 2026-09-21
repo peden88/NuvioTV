@@ -43,5 +43,15 @@ jobs:
           echo "CATALOG_URL=$ok"
           echo "CHANNEL_COUNT=$(jq '.metas | length' /tmp/channels.json)"
           echo "=== CHANNELS TSV ==="
-          jq -r '.metas[] | [(.name // ""), (.genres[0] // ""), (.id // "")] | @tsv' /tmp/channels.json             | sort -f
+          jq -r '.metas[] | [(.name // ""), (.genres[0] // ""), (.id // "")] | @tsv' /tmp/channels.json | sort -f | tee /tmp/channels.tsv
           echo "=== END CHANNELS TSV ==="
+
+      - name: Upload channel dump
+        uses: actions/upload-artifact@v4
+        with:
+          name: aioplay-live-channels
+          path: |
+            /tmp/channels.tsv
+            /tmp/channels.json
+          if-no-files-found: error
+          retention-days: 1

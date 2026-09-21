@@ -55,3 +55,20 @@ jobs:
             /tmp/channels.json
           if-no-files-found: error
           retention-days: 1
+
+
+      - name: Query TimStreams channel metadata
+        shell: bash
+        run: |
+          curl -L --connect-timeout 15 --max-time 60 -fsS https://timst.cfd/api/channels -o /tmp/timstreams.json
+          jq -r '.channels[] | [(.name // ""), (.flag // ""), (.genre // ""), (.url // "")] | @tsv' /tmp/timstreams.json | sort -f | tee /tmp/timstreams.tsv
+
+      - name: Upload TimStreams metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: timstreams-channel-metadata
+          path: |
+            /tmp/timstreams.tsv
+            /tmp/timstreams.json
+          if-no-files-found: error
+          retention-days: 1

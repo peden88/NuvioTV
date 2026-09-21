@@ -270,7 +270,9 @@ private fun AioPlaySignedInApp(
                     when (state.selectedSection) {
                         AioPlaySection.LIVE -> {
                             val contentType = if (
-                                state.selectedCatalogId
+                                state.catalogs
+                                    .firstOrNull { it.selectionKey == state.selectedCatalogId }
+                                    ?.id
                                     ?.startsWith("nuvio_sports_channel_") == true
                             ) {
                                 "live_channel"
@@ -484,10 +486,10 @@ private fun AioPlayHomeScreen(
                 contentPadding = PaddingValues(bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                items(state.catalogs, key = { it.id }) { catalog ->
+                items(state.catalogs, key = { it.selectionKey }) { catalog ->
                     AioPlayNavCard(
                         text = catalog.name,
-                        selected = state.selectedCatalogId == catalog.id,
+                        selected = state.selectedCatalogId == catalog.selectionKey,
                         onClick = { onCatalog(catalog) }
                     )
                 }
@@ -542,7 +544,7 @@ private fun AioPlayHomeScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             val title = state.catalogs
-                .firstOrNull { it.id == state.selectedCatalogId }
+                .firstOrNull { it.selectionKey == state.selectedCatalogId }
                 ?.name
                 ?: state.selectedSection.label
 

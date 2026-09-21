@@ -1,0 +1,47 @@
+name: Dump live AIOPlay channels
+
+on:
+  push:
+    branches:
+      - diag/channels-catalog
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Query live catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          urls=(
+            "https://aioplay.peden88.stream/saved/catalog/tv/nuvio_sports_channels.json"
+            "https://aioplay.peden88.stream/catalog/tv/nuvio_sports_channels.json"
+          )
+
+          ok=""
+          for url in "${urls[@]}"; do
+            code="$(curl -L --connect-timeout 15 --max-time 60 -sS -o /tmp/channels.json -w '%{http_code}' "$url" || true)"
+            echo "Tried $url -> HTTP $code"
+            if [ "$code" = "200" ] && jq -e '.metas | arrays' /tmp/channels.json >/dev/null 2>&1; then
+              ok="$url"
+              break
+            fi
+          done
+
+          if [ -z "$ok" ]; then
+            echo "No usable catalog response."
+            if [ -s /tmp/channels.json ]; then
+              head -c 1000 /tmp/channels.json | sed 's/[^[:print:]\t]//g'
+            fi
+            exit 1
+          fi
+
+          echo "CATALOG_URL=$ok"
+          echo "CHANNEL_COUNT=$(jq '.metas | length' /tmp/channels.json)"
+          echo "=== CHANNELS TSV ==="
+          jq -r '.metas[] | [(.name // ""), (.genres[0] // ""), (.id // "")] | @tsv' /tmp/channels.json             | sort -f
+          echo "=== END CHANNELS TSV ==="

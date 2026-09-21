@@ -40,7 +40,7 @@ jobs:
           printf '%s\n' \
             'NUVIO_SUPABASE_URL=https://ci.invalid.example' \
             'NUVIO_SUPABASE_ANON_KEY=ci-placeholder' \
-            'AIOPLAY_API_BASE_URL=https://aioplay-ci.invalid.example' \
+            'AIOPLAY_API_BASE_URL=https://aioplay.peden88.stream' \
             > local.properties
 
       - name: Build AIOPlay TV

@@ -170,7 +170,7 @@ class AioPlayApiClient @Inject constructor(
                 val type = row.optString("type")
                 if (id.isBlank() || type !in setOf("movie", "series")) continue
 
-                val extras = buildList {
+                val requiredExtras = buildList {
                     val required = row.optJSONArray("requiredExtras")
                     if (required != null) {
                         for (j in 0 until required.length()) {
@@ -178,22 +178,61 @@ class AioPlayApiClient @Inject constructor(
                         }
                     }
                 }
-                add(
-                    AioPlayCatalog(
-                        id = id,
-                        name = name,
-                        type = type,
-                        requiredExtras = extras
+
+                val genres = buildList {
+                    val options = row.optJSONArray("genres")
+                    if (options != null) {
+                        for (j in 0 until options.length()) {
+                            options.optString(j).takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                    }
+                }
+
+                // Keep the directly loadable base catalog.
+                if (requiredExtras.isEmpty()) {
+                    add(
+                        AioPlayCatalog(
+                            id = id,
+                            name = name,
+                            type = type,
+                            requiredExtras = requiredExtras
+                        )
                     )
-                )
+                }
+
+                // AIOMetadata may expose one catalog plus a genre selector.
+                // Turn those options into first-class TV side-menu entries.
+                if (genres.isNotEmpty() && requiredExtras.all { it == "genre" }) {
+                    for (genre in genres) {
+                        add(
+                            AioPlayCatalog(
+                                id = id,
+                                name = genre,
+                                type = type,
+                                requiredExtras = requiredExtras,
+                                extras = mapOf("genre" to genre)
+                            )
+                        )
+                    }
+                }
             }
         }
     }
 
     suspend fun vodCatalog(token: String, catalog: AioPlayCatalog): List<AioPlayItem> {
         val type = requireVodType(catalog.type)
+        val query = if (catalog.extras.isEmpty()) {
+            ""
+        } else {
+            catalog.extras.entries.joinToString(
+                separator = "&",
+                prefix = "?"
+            ) { (key, value) ->
+                URLEncoder.encode(key, "UTF-8") + "=" + URLEncoder.encode(value, "UTF-8")
+            }
+        }
         val json = requestJson(
-            "/api/v1/vod/catalog/" + encodePath(type) + "/" + encodePath(catalog.id),
+            "/api/v1/vod/catalog/" + encodePath(type) + "/" + encodePath(catalog.id) + query,
             token = token
         )
         return parseItems(json, type)

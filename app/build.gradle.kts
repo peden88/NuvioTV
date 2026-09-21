@@ -122,9 +122,9 @@ fun truthy(value: String?): Boolean {
 }
 
 val buildingAppBundle = gradle.startParameter.taskNames.any { it.contains("bundle", ignoreCase = true) }
-val aioplayArm64Only = truthy(
-    providers.gradleProperty("aioplayArm64Only").orNull
-        ?: env("AIOPLAY_ARM64_ONLY")
+val aioplayStreamerOnly = truthy(
+    providers.gradleProperty("aioplayStreamerOnly").orNull
+        ?: env("AIOPLAY_STREAMER_ONLY")
 )
 val useDebugReleaseSigning = env("CI_USE_DEBUG_SIGNING").equals("true", ignoreCase = true)
 val useLocalFfmpegDecoder = truthy(
@@ -324,10 +324,11 @@ android {
         abi {
             isEnable = !buildingAppBundle
             reset()
-            if (aioplayArm64Only) {
-                // Dedicated AIOPlay sideload build for Google TV Streamer 4K.
-                // Keep only 64-bit ARM native libraries to minimise APK size.
-                include("arm64-v8a")
+            if (aioplayStreamerOnly) {
+                // Dedicated AIOPlay sideload build for the user's Google TV Streamer 4K.
+                // Device testing confirmed the Android userspace accepts 32-bit ARM
+                // (armeabi-v7a) while arm64-v8a is reported incompatible.
+                include("armeabi-v7a")
                 isUniversalApk = false
             } else {
                 include("armeabi-v7a", "arm64-v8a")

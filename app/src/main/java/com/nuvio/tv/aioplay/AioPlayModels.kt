@@ -1,5 +1,7 @@
 package com.nuvio.tv.aioplay
 
+import com.nuvio.tv.domain.model.Meta
+
 data class AioPlayUser(
     val id: String,
     val username: String,
@@ -60,15 +62,20 @@ data class AioPlayPlayback(
     val target: AioPlayPlaybackTarget
 )
 
-
 data class AioPlayVideo(
     val id: String,
     val title: String,
     val season: Int?,
-    val episode: Int?
+    val episode: Int?,
+    val released: String? = null,
+    val thumbnail: String? = null,
+    val overview: String? = null,
+    val runtime: Int? = null,
+    val rating: Double? = null
 )
 
 data class AioPlayMetaDetails(
     val item: AioPlayItem,
-    val videos: List<AioPlayVideo>
+    val videos: List<AioPlayVideo>,
+    val meta: Meta
 )

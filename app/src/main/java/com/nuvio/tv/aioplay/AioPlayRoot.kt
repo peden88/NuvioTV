@@ -84,6 +84,8 @@ private enum class AioPlayHomeFocusZone {
 }
 private const val SETTINGS_ROUTE = "aioplay_settings"
 private const val ACCOUNT_ROUTE = "aioplay_account"
+private const val DETAIL_ROUTE =
+    "aioplay_detail?itemId={itemId}&itemType={itemType}&title={title}&poster={poster}&backdrop={backdrop}&logo={logo}"
 private const val SERIES_ROUTE =
     "aioplay_series?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}&logo={logo}"
 private const val LOADING_ROUTE =
@@ -107,6 +109,15 @@ private fun loadingRoute(
         "&logo=" + encode(item.logo) +
         "&contentType=" + encode(contentType) +
         "&sessionId=" + encode(sessionId)
+
+private fun detailRoute(item: AioPlayItem): String =
+    "aioplay_detail" +
+        "?itemId=" + encode(item.id) +
+        "&itemType=" + encode(item.type) +
+        "&title=" + encode(item.name) +
+        "&poster=" + encode(item.poster) +
+        "&backdrop=" + encode(item.background) +
+        "&logo=" + encode(item.logo)
 
 private fun seriesRoute(item: AioPlayItem): String =
     "aioplay_series" +
@@ -294,11 +305,7 @@ private fun AioPlaySignedInApp(
                             navController.navigate(loadingRoute(item, contentType))
                         }
                         AioPlaySection.VOD -> {
-                            if (item.type.equals("series", ignoreCase = true)) {
-                                navController.navigate(seriesRoute(item))
-                            } else {
-                                navController.navigate(loadingRoute(item, "movie"))
-                            }
+                            navController.navigate(detailRoute(item))
                         }
                         AioPlaySection.CONTINUE -> {
                             val contentType = if (item.type.equals("episode", ignoreCase = true)) {
@@ -318,6 +325,36 @@ private fun AioPlaySignedInApp(
         composable(SETTINGS_ROUTE) {
             PlaybackSettingsScreen(
                 onBackPress = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = DETAIL_ROUTE,
+            arguments = listOf(
+                navArgument("itemId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("itemType") { type = NavType.StringType; defaultValue = "movie" },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                navArgument("poster") { type = NavType.StringType; defaultValue = "" },
+                navArgument("backdrop") { type = NavType.StringType; defaultValue = "" },
+                navArgument("logo") { type = NavType.StringType; defaultValue = "" }
+            )
+        ) { entry ->
+            val preview = AioPlayItem(
+                id = entry.arguments?.getString("itemId").orEmpty(),
+                type = entry.arguments?.getString("itemType").orEmpty().ifBlank { "movie" },
+                name = entry.arguments?.getString("title").orEmpty(),
+                description = null,
+                poster = entry.arguments?.getString("poster")?.takeIf { it.isNotBlank() },
+                background = entry.arguments?.getString("backdrop")?.takeIf { it.isNotBlank() },
+                logo = entry.arguments?.getString("logo")?.takeIf { it.isNotBlank() }
+            )
+            AioPlayDetailsScreen(
+                preview = preview,
+                viewModel = viewModel,
+                onPlay = { item, contentType ->
+                    navController.navigate(loadingRoute(item, contentType))
+                },
+                onBack = { navController.popBackStack() }
             )
         }
 

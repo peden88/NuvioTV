@@ -302,6 +302,7 @@ fun EpisodesRow(
     onEpisodeManualPlayClick: (Video) -> Unit = onEpisodeClick,
     onEpisodeStartFromBeginningClick: (Video) -> Unit = onEpisodeClick,
     onToggleEpisodeWatched: (Video) -> Unit,
+    showEpisodeOptions: Boolean = true,
     showManualPlayOption: Boolean = false,
     onMarkSeasonWatched: (Int) -> Unit = {},
     onMarkSeasonUnwatched: (Int) -> Unit = {},
@@ -414,7 +415,9 @@ fun EpisodesRow(
             val isMarkedWatched = remember(seasonEp, watchedEpisodes) { seasonEp?.let { watchedEpisodes.contains(it) } ?: false }
             val episodeFocusRequester = remember(episode.id) { episodeFocusRequesters.getOrPut(episode.id) { FocusRequester() } }
             val episodeOnClick = remember(episode.id) { { onEpisodeClick(episode) } }
-            val episodeOnLongPress = remember(episode.id) { { optionsEpisode = episode } }
+            val episodeOnLongPress = remember(episode.id, showEpisodeOptions) {
+                { if (showEpisodeOptions) optionsEpisode = episode }
+            }
             val episodeOnFocused = remember(episode.id) { {
                 onEpisodeFocused(episode)
             } }

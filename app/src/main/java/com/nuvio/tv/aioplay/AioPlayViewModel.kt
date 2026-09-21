@@ -11,12 +11,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+enum class AioPlaySection(val label: String) {
+    LIVE("Live"),
+    SERIES("Series"),
+    MOVIES("Movies")
+}
+
 data class AioPlayUiState(
     val checkingSession: Boolean = true,
     val signedIn: Boolean = false,
     val loginBusy: Boolean = false,
     val user: AioPlayUser? = null,
     val capabilities: AioPlayCapabilities? = null,
+    val selectedSection: AioPlaySection = AioPlaySection.LIVE,
     val catalogs: List<AioPlayCatalog> = emptyList(),
     val selectedCatalogId: String? = null,
     val items: List<AioPlayItem> = emptyList(),
@@ -33,6 +40,9 @@ class AioPlayViewModel @Inject constructor(
     val state: StateFlow<AioPlayUiState> = _state.asStateFlow()
 
     private var token: String? = null
+    private var liveCatalogs: List<AioPlayCatalog> = emptyList()
+    private var movieCatalogs: List<AioPlayCatalog> = emptyList()
+    private var seriesCatalogs: List<AioPlayCatalog> = emptyList()
 
     init {
         viewModelScope.launch { restoreSession() }
@@ -93,28 +103,87 @@ class AioPlayViewModel @Inject constructor(
     private suspend fun enterSignedInState(user: AioPlayUser) {
         val activeToken = token ?: return
         val capabilities = api.capabilities(activeToken)
-        val catalogs = if (capabilities.sportsEnabled) {
+
+        liveCatalogs = if (capabilities.sportsEnabled) {
             api.catalogs(activeToken)
                 .filter { it.type.equals("tv", ignoreCase = true) }
         } else {
             emptyList()
         }
 
-        val preferred = catalogs.firstOrNull { it.id == "nuvio_sports_live" }
-            ?: catalogs.firstOrNull()
+        val vodCatalogs = if (capabilities.vodEnabled) {
+            runCatching { api.vodCatalogs(activeToken) }.getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
+
+        movieCatalogs = vodCatalogs.filter {
+            it.type.equals("movie", ignoreCase = true) && it.requiredExtras.isEmpty()
+        }
+        seriesCatalogs = vodCatalogs.filter {
+            it.type.equals("series", ignoreCase = true) && it.requiredExtras.isEmpty()
+        }
+
+        val initialSection = when {
+            liveCatalogs.isNotEmpty() -> AioPlaySection.LIVE
+            seriesCatalogs.isNotEmpty() -> AioPlaySection.SERIES
+            movieCatalogs.isNotEmpty() -> AioPlaySection.MOVIES
+            else -> AioPlaySection.LIVE
+        }
+        val initialCatalogs = catalogsFor(initialSection)
+        val preferred = if (initialSection == AioPlaySection.LIVE) {
+            initialCatalogs.firstOrNull { it.id == "nuvio_sports_live" }
+                ?: initialCatalogs.firstOrNull()
+        } else {
+            initialCatalogs.firstOrNull()
+        }
 
         _state.value = AioPlayUiState(
             checkingSession = false,
             signedIn = true,
             user = user,
             capabilities = capabilities,
-            catalogs = catalogs,
+            selectedSection = initialSection,
+            catalogs = initialCatalogs,
             selectedCatalogId = preferred?.id,
             loadingCatalog = preferred != null
         )
 
         if (preferred != null) {
             loadCatalogInternal(preferred)
+        }
+    }
+
+    private fun catalogsFor(section: AioPlaySection): List<AioPlayCatalog> = when (section) {
+        AioPlaySection.LIVE -> liveCatalogs
+        AioPlaySection.SERIES -> seriesCatalogs
+        AioPlaySection.MOVIES -> movieCatalogs
+    }
+
+    fun selectSection(section: AioPlaySection) {
+        if (_state.value.selectedSection == section) return
+        viewModelScope.launch {
+            val catalogs = catalogsFor(section)
+            val preferred = if (section == AioPlaySection.LIVE) {
+                catalogs.firstOrNull { it.id == "nuvio_sports_live" } ?: catalogs.firstOrNull()
+            } else {
+                catalogs.firstOrNull()
+            }
+
+            _state.value = _state.value.copy(
+                selectedSection = section,
+                catalogs = catalogs,
+                selectedCatalogId = preferred?.id,
+                items = emptyList(),
+                loadingCatalog = preferred != null,
+                error = if (preferred == null) {
+                    "No ${section.label.lowercase()} catalogs are available."
+                } else {
+                    null
+                }
+            )
+
+            if (preferred != null) loadCatalogInternal(preferred)
         }
     }
 
@@ -137,7 +206,13 @@ class AioPlayViewModel @Inject constructor(
             loadingCatalog = true,
             error = null
         )
-        runCatching { api.catalog(activeToken, catalog) }
+
+        val request = when (catalog.type.lowercase()) {
+            "movie", "series" -> runCatching { api.vodCatalog(activeToken, catalog) }
+            else -> runCatching { api.catalog(activeToken, catalog) }
+        }
+
+        request
             .onSuccess { items ->
                 _state.value = _state.value.copy(
                     items = items,
@@ -151,6 +226,7 @@ class AioPlayViewModel @Inject constructor(
                     _state.value = AioPlayUiState(checkingSession = false)
                 } else {
                     _state.value = _state.value.copy(
+                        items = emptyList(),
                         loadingCatalog = false,
                         error = error.message ?: "Catalog could not be loaded."
                     )
@@ -158,10 +234,20 @@ class AioPlayViewModel @Inject constructor(
             }
     }
 
+    suspend fun loadVodMeta(type: String, id: String): Result<AioPlayMetaDetails> {
+        val activeToken = token ?: return Result.failure(
+            AioPlayApiException("Your session has expired.", 403)
+        )
+        return runCatching { api.vodMeta(activeToken, type, id) }
+    }
+
     fun signOut() {
         viewModelScope.launch {
             val oldToken = token
             token = null
+            liveCatalogs = emptyList()
+            movieCatalogs = emptyList()
+            seriesCatalogs = emptyList()
             if (!oldToken.isNullOrBlank()) {
                 runCatching { api.logout(oldToken) }
             }

@@ -355,6 +355,13 @@ android {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
         }
+        // AIOPlay reuses the mature Nuvio player/runtime. Shared Hilt classes
+        // depend on PluginManager at compile time even though the AIOPlay UI
+        // disables plugin management. Compile against the full runtime source
+        // set so those shared dependencies remain resolvable.
+        getByName("aioplay") {
+            java.srcDir("src/full/java")
+        }
     }
 
     packaging {
@@ -409,6 +416,13 @@ baselineProfile {
     }
 }
 
+
+// The AIOPlay variant shares the full runtime implementation required by
+// PlayerViewModel/StreamRepository/Hilt, but its product flags keep plugins,
+// addon management and updater surfaces disabled for users.
+configurations.named("aioplayImplementation") {
+    extendsFrom(configurations.getByName("fullImplementation"))
+}
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")

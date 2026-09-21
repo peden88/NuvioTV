@@ -118,10 +118,10 @@ class AioPlayViewModel @Inject constructor(
         }
 
         movieCatalogs = vodCatalogs.filter {
-            it.type.equals("movie", ignoreCase = true) && it.requiredExtras.isEmpty()
+            it.type.equals("movie", ignoreCase = true)
         }
         seriesCatalogs = vodCatalogs.filter {
-            it.type.equals("series", ignoreCase = true) && it.requiredExtras.isEmpty()
+            it.type.equals("series", ignoreCase = true)
         }
 
         val initialSection = when {
@@ -145,7 +145,7 @@ class AioPlayViewModel @Inject constructor(
             capabilities = capabilities,
             selectedSection = initialSection,
             catalogs = initialCatalogs,
-            selectedCatalogId = preferred?.id,
+            selectedCatalogId = preferred?.selectionKey,
             loadingCatalog = preferred != null
         )
 
@@ -173,7 +173,7 @@ class AioPlayViewModel @Inject constructor(
             _state.value = _state.value.copy(
                 selectedSection = section,
                 catalogs = catalogs,
-                selectedCatalogId = preferred?.id,
+                selectedCatalogId = preferred?.selectionKey,
                 items = emptyList(),
                 loadingCatalog = preferred != null,
                 error = if (preferred == null) {
@@ -188,13 +188,13 @@ class AioPlayViewModel @Inject constructor(
     }
 
     fun selectCatalog(catalog: AioPlayCatalog) {
-        if (_state.value.selectedCatalogId == catalog.id && _state.value.items.isNotEmpty()) return
+        if (_state.value.selectedCatalogId == catalog.selectionKey && _state.value.items.isNotEmpty()) return
         viewModelScope.launch { loadCatalogInternal(catalog) }
     }
 
     fun refreshCurrentCatalog() {
         val selected = _state.value.catalogs.firstOrNull {
-            it.id == _state.value.selectedCatalogId
+            it.selectionKey == _state.value.selectedCatalogId
         } ?: return
         viewModelScope.launch { loadCatalogInternal(selected) }
     }
@@ -202,7 +202,7 @@ class AioPlayViewModel @Inject constructor(
     private suspend fun loadCatalogInternal(catalog: AioPlayCatalog) {
         val activeToken = token ?: return
         _state.value = _state.value.copy(
-            selectedCatalogId = catalog.id,
+            selectedCatalogId = catalog.selectionKey,
             loadingCatalog = true,
             error = null
         )

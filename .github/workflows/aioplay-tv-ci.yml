@@ -44,7 +44,7 @@ jobs:
             > local.properties
 
       - name: Build AIOPlay TV
-        run: ./gradlew :app:assembleAiosportDebug --stacktrace --no-daemon
+        run: ./gradlew :app:assembleAioplayDebug --stacktrace --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

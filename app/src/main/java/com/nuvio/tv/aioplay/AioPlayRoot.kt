@@ -409,8 +409,18 @@ private fun AioPlayHomeScreen(
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            Image(
+                painter = painterResource(id = R.drawable.aioplay_brand),
+                contentDescription = "AIOPlay",
+                modifier = Modifier
+                    .width(86.dp)
+                    .aspectRatio(1f)
+                    .align(Alignment.CenterHorizontally)
+                    .padding(vertical = 4.dp),
+                contentScale = ContentScale.Fit
+            )
             Text(
-                text = "AIOPlay TV",
+                text = "AIOPlay",
                 style = MaterialTheme.typography.titleLarge,
                 color = NuvioTheme.colors.TextPrimary,
                 fontWeight = FontWeight.Bold,

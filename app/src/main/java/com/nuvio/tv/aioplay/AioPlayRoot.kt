@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -72,6 +73,12 @@ import java.net.URLEncoder
 import org.json.JSONObject
 
 private const val HOME_ROUTE = "aioplay_home"
+
+private enum class AioPlayHomeFocusZone {
+    TOP,
+    NAV,
+    CONTENT
+}
 private const val SETTINGS_ROUTE = "aioplay_settings"
 private const val ACCOUNT_ROUTE = "aioplay_account"
 private const val SERIES_ROUTE =
@@ -288,6 +295,14 @@ private fun AioPlaySignedInApp(
                                 navController.navigate(loadingRoute(item, "movie"))
                             }
                         }
+                        AioPlaySection.CONTINUE -> {
+                            val contentType = if (item.type.equals("episode", ignoreCase = true)) {
+                                "episode"
+                            } else {
+                                "movie"
+                            }
+                            navController.navigate(loadingRoute(item, contentType))
+                        }
                     }
                 },
                 onSettings = { navController.navigate(SETTINGS_ROUTE) },
@@ -450,6 +465,40 @@ private fun AioPlayHomeScreen(
     onSettings: () -> Unit,
     onAccount: () -> Unit
 ) {
+    val liveFocus = remember { FocusRequester() }
+    val vodFocus = remember { FocusRequester() }
+    val continueFocus = remember { FocusRequester() }
+    val navFocusRequesters = remember(state.catalogs.map { it.selectionKey }) {
+        state.catalogs.associate { it.selectionKey to FocusRequester() }
+    }
+    var focusZone by remember { mutableStateOf(AioPlayHomeFocusZone.TOP) }
+
+    fun selectedTopRequester(): FocusRequester = when (state.selectedSection) {
+        AioPlaySection.LIVE -> liveFocus
+        AioPlaySection.VOD -> vodFocus
+        AioPlaySection.CONTINUE -> continueFocus
+    }
+
+    fun focusFirstNavItem() {
+        val first = state.catalogs.firstOrNull() ?: return
+        runCatching { navFocusRequesters[first.selectionKey]?.requestFocus() }
+    }
+
+    fun focusSelectedNavItem() {
+        val selected = state.catalogs.firstOrNull {
+            it.selectionKey == state.selectedCatalogId
+        } ?: state.catalogs.firstOrNull() ?: return
+        runCatching { navFocusRequesters[selected.selectionKey]?.requestFocus() }
+    }
+
+    BackHandler {
+        when (focusZone) {
+            AioPlayHomeFocusZone.TOP -> focusFirstNavItem()
+            AioPlayHomeFocusZone.NAV -> runCatching { selectedTopRequester().requestFocus() }
+            AioPlayHomeFocusZone.CONTENT -> focusSelectedNavItem()
+        }
+    }
+
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -460,38 +509,54 @@ private fun AioPlayHomeScreen(
                 .width(205.dp)
                 .fillMaxHeight()
                 .background(NuvioTheme.colors.BackgroundElevated)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.aioplay_brand),
-                contentDescription = "AIOPlay",
+            Row(
                 modifier = Modifier
-                    .width(66.dp)
-                    .aspectRatio(1f)
-                    .align(Alignment.CenterHorizontally),
-                contentScale = ContentScale.Fit
-            )
-            Text(
-                text = "AIOPlay",
-                style = MaterialTheme.typography.titleMedium,
-                color = NuvioTheme.colors.TextPrimary,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 7.dp, vertical = 7.dp)
-            )
+                    .fillMaxWidth()
+                    .padding(bottom = 3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.aioplay_brand),
+                    contentDescription = "AIOPlay",
+                    modifier = Modifier
+                        .width(50.dp)
+                        .aspectRatio(1f),
+                    contentScale = ContentScale.Fit
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "AIOPlay",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = NuvioTheme.colors.TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
 
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = PaddingValues(bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                contentPadding = PaddingValues(bottom = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 items(state.catalogs, key = { it.selectionKey }) { catalog ->
+                    val requester = navFocusRequesters[catalog.selectionKey]
                     AioPlayNavCard(
                         text = catalog.name,
                         selected = state.selectedCatalogId == catalog.selectionKey,
-                        onClick = { onCatalog(catalog) }
+                        onClick = { onCatalog(catalog) },
+                        modifier = Modifier
+                            .then(
+                                if (requester != null) Modifier.focusRequester(requester)
+                                else Modifier
+                            )
+                            .onFocusChanged {
+                                if (it.isFocused) focusZone = AioPlayHomeFocusZone.NAV
+                            }
                     )
                 }
             }
@@ -499,12 +564,18 @@ private fun AioPlayHomeScreen(
             AioPlayNavCard(
                 text = "Playback Settings",
                 selected = false,
-                onClick = onSettings
+                onClick = onSettings,
+                modifier = Modifier.onFocusChanged {
+                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.NAV
+                }
             )
             AioPlayNavCard(
                 text = state.user?.displayName?.ifBlank { state.user.username } ?: "Account",
                 selected = false,
-                onClick = onAccount
+                onClick = onAccount,
+                modifier = Modifier.onFocusChanged {
+                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.NAV
+                }
             )
         }
 
@@ -523,7 +594,12 @@ private fun AioPlayHomeScreen(
                     AioPlaySectionCard(
                         text = "Live",
                         selected = state.selectedSection == AioPlaySection.LIVE,
-                        onClick = { onSection(AioPlaySection.LIVE) }
+                        onClick = { onSection(AioPlaySection.LIVE) },
+                        modifier = Modifier
+                            .focusRequester(liveFocus)
+                            .onFocusChanged {
+                                if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                            }
                     )
                 }
                 if (state.capabilities?.vodEnabled == true) {
@@ -531,7 +607,23 @@ private fun AioPlayHomeScreen(
                     AioPlaySectionCard(
                         text = "VOD",
                         selected = state.selectedSection == AioPlaySection.VOD,
-                        onClick = { onSection(AioPlaySection.VOD) }
+                        onClick = { onSection(AioPlaySection.VOD) },
+                        modifier = Modifier
+                            .focusRequester(vodFocus)
+                            .onFocusChanged {
+                                if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                            }
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    AioPlaySectionCard(
+                        text = "Continue Watching",
+                        selected = state.selectedSection == AioPlaySection.CONTINUE,
+                        onClick = { onSection(AioPlaySection.CONTINUE) },
+                        modifier = Modifier
+                            .focusRequester(continueFocus)
+                            .onFocusChanged {
+                                if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                            }
                     )
                 }
             }
@@ -582,7 +674,7 @@ private fun AioPlayHomeScreen(
                     }
                 }
                 else -> {
-                    val posterMode = state.selectedSection == AioPlaySection.VOD
+                    val posterMode = state.selectedSection != AioPlaySection.LIVE
                     LazyVerticalGrid(
                         columns = if (posterMode) {
                             GridCells.Fixed(5)
@@ -605,7 +697,12 @@ private fun AioPlayHomeScreen(
                             AioPlayContentCard(
                                 item = item,
                                 posterMode = posterMode,
-                                onClick = { onItem(item) }
+                                onClick = { onItem(item) },
+                                modifier = Modifier.onFocusChanged {
+                                    if (it.isFocused) {
+                                        focusZone = AioPlayHomeFocusZone.CONTENT
+                                    }
+                                }
                             )
                         }
                     }
@@ -619,12 +716,13 @@ private fun AioPlayHomeScreen(
 private fun AioPlaySectionCard(
     text: String,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(12.dp)
     Card(
         onClick = onClick,
-        modifier = Modifier.width(132.dp),
+        modifier = modifier.width(132.dp),
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
             containerColor = if (selected) {
@@ -666,12 +764,13 @@ private fun AioPlaySectionCard(
 private fun AioPlayNavCard(
     text: String,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(10.dp)
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
             containerColor = if (selected) {
@@ -704,12 +803,13 @@ private fun AioPlayNavCard(
 private fun AioPlayContentCard(
     item: AioPlayItem,
     posterMode: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(12.dp)
     Card(
         onClick = onClick,
-        modifier = Modifier
+        modifier = modifier
             .padding(
                 horizontal = if (posterMode) 3.dp else 0.dp,
                 vertical = if (posterMode) 5.dp else 0.dp

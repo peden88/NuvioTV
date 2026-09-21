@@ -3,17 +3,20 @@ package com.nuvio.tv.aioplay
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.data.local.AioPlaySessionStore
+import com.nuvio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 enum class AioPlaySection(val label: String) {
     LIVE("Live"),
-    VOD("VOD")
+    VOD("VOD"),
+    CONTINUE("Continue Watching")
 }
 
 data class AioPlayUiState(
@@ -33,7 +36,8 @@ data class AioPlayUiState(
 @HiltViewModel
 class AioPlayViewModel @Inject constructor(
     private val api: AioPlayApiClient,
-    private val sessionStore: AioPlaySessionStore
+    private val sessionStore: AioPlaySessionStore,
+    private val watchProgressRepository: WatchProgressRepository
 ) : ViewModel() {
     private val _state = MutableStateFlow(AioPlayUiState())
     val state: StateFlow<AioPlayUiState> = _state.asStateFlow()
@@ -41,9 +45,49 @@ class AioPlayViewModel @Inject constructor(
     private var token: String? = null
     private var liveCatalogs: List<AioPlayCatalog> = emptyList()
     private var vodCatalogs: List<AioPlayCatalog> = emptyList()
+    private var continueWatchingItems: List<AioPlayItem> = emptyList()
+
+    private val continueWatchingCatalog = AioPlayCatalog(
+        id = "continue_watching",
+        name = "Continue Watching",
+        type = "continue"
+    )
 
     init {
         viewModelScope.launch { restoreSession() }
+        viewModelScope.launch {
+            watchProgressRepository.continueWatching.collectLatest { rows ->
+                continueWatchingItems = rows.map { progress ->
+                    val isSeries = progress.contentType.equals("series", ignoreCase = true)
+                    val episodeLabel = if (
+                        isSeries && progress.season != null && progress.episode != null
+                    ) {
+                        "S" + progress.season.toString().padStart(2, '0') +
+                            "E" + progress.episode.toString().padStart(2, '0') +
+                            progress.episodeTitle?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+                    } else {
+                        null
+                    }
+                    AioPlayItem(
+                        id = if (isSeries) progress.videoId else progress.contentId,
+                        type = if (isSeries) "episode" else "movie",
+                        name = progress.name,
+                        description = episodeLabel,
+                        poster = progress.poster,
+                        background = progress.backdrop,
+                        logo = progress.logo
+                    )
+                }
+
+                if (_state.value.selectedSection == AioPlaySection.CONTINUE) {
+                    _state.value = _state.value.copy(
+                        items = continueWatchingItems,
+                        loadingCatalog = false,
+                        error = null
+                    )
+                }
+            }
+        }
     }
 
     private suspend fun restoreSession() {
@@ -147,6 +191,7 @@ class AioPlayViewModel @Inject constructor(
     private fun catalogsFor(section: AioPlaySection): List<AioPlayCatalog> = when (section) {
         AioPlaySection.LIVE -> liveCatalogs
         AioPlaySection.VOD -> vodCatalogs
+        AioPlaySection.CONTINUE -> listOf(continueWatchingCatalog)
     }
 
     fun selectSection(section: AioPlaySection) {
@@ -157,6 +202,18 @@ class AioPlayViewModel @Inject constructor(
                 catalogs.firstOrNull { it.id == "nuvio_sports_live" } ?: catalogs.firstOrNull()
             } else {
                 catalogs.firstOrNull()
+            }
+
+            if (section == AioPlaySection.CONTINUE) {
+                _state.value = _state.value.copy(
+                    selectedSection = section,
+                    catalogs = catalogs,
+                    selectedCatalogId = preferred?.selectionKey,
+                    items = continueWatchingItems,
+                    loadingCatalog = false,
+                    error = null
+                )
+                return@launch
             }
 
             _state.value = _state.value.copy(
@@ -182,6 +239,10 @@ class AioPlayViewModel @Inject constructor(
     }
 
     fun refreshCurrentCatalog() {
+        if (_state.value.selectedSection == AioPlaySection.CONTINUE) {
+            _state.value = _state.value.copy(items = continueWatchingItems, error = null)
+            return
+        }
         val selected = _state.value.catalogs.firstOrNull {
             it.selectionKey == _state.value.selectedCatalogId
         } ?: return
@@ -195,6 +256,15 @@ class AioPlayViewModel @Inject constructor(
             loadingCatalog = true,
             error = null
         )
+
+        if (catalog.type == "continue") {
+            _state.value = _state.value.copy(
+                items = continueWatchingItems,
+                loadingCatalog = false,
+                error = null
+            )
+            return
+        }
 
         val request = when (catalog.type.lowercase()) {
             "movie", "series" -> runCatching { api.vodCatalog(activeToken, catalog) }

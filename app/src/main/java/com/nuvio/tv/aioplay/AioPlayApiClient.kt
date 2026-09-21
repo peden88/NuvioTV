@@ -1,4 +1,4 @@
-package com.nuvio.tv.aiosport
+package com.nuvio.tv.aioplay
 
 import android.os.Build
 import com.nuvio.tv.BuildConfig
@@ -16,17 +16,17 @@ import org.json.JSONObject
 
 private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
-class AioSportApiException(
+class AioPlayApiException(
     message: String,
     val statusCode: Int? = null
 ) : Exception(message)
 
 @Singleton
-class AioSportApiClient @Inject constructor(
+class AioPlayApiClient @Inject constructor(
     @param:Named("customServerAuth") private val http: OkHttpClient
 ) {
     private val baseUrl: String
-        get() = BuildConfig.AIOSPORT_API_BASE_URL.trim().trimEnd('/')
+        get() = BuildConfig.AIOPLAY_API_BASE_URL.trim().trimEnd('/')
 
     fun isConfigured(): Boolean {
         if (baseUrl.isBlank()) return false
@@ -38,8 +38,8 @@ class AioSportApiClient @Inject constructor(
 
     private fun requireBaseUrl(): String {
         if (!isConfigured()) {
-            throw AioSportApiException(
-                "AIOSport server URL is not configured in this APK."
+            throw AioPlayApiException(
+                "AIOPlay server URL is not configured in this APK."
             )
         }
         return baseUrl
@@ -75,7 +75,7 @@ class AioSportApiClient @Inject constructor(
                 val message = runCatching {
                     JSONObject(raw).optString("error").takeIf { it.isNotBlank() }
                 }.getOrNull() ?: ("Server returned HTTP " + httpResponse.code + ".")
-                throw AioSportApiException(message, httpResponse.code)
+                throw AioPlayApiException(message, httpResponse.code)
             }
             if (allowEmpty && raw.isBlank()) return@use JSONObject()
             if (raw.isBlank()) return@use JSONObject()
@@ -83,7 +83,7 @@ class AioSportApiClient @Inject constructor(
         }
     }
 
-    suspend fun login(username: String, password: String): AioSportLoginResult {
+    suspend fun login(username: String, password: String): AioPlayLoginResult {
         val payload = JSONObject()
             .put("username", username.trim())
             .put("password", password)
@@ -96,30 +96,30 @@ class AioSportApiClient @Inject constructor(
                     .ifBlank { "Android TV" }
             )
 
-        val json = requestJson("/api/login", method = "POST", body = payload)
-        val token = json.optString("token")
+        val json = requestJson("/api/v1/auth/login", method = "POST", body = payload)
+        val token = json.optString("accessToken")
         val user = json.optJSONObject("user")
         if (token.isBlank() || user == null) {
-            throw AioSportApiException("The server did not return an app session.")
+            throw AioPlayApiException("The server did not return an app session.")
         }
-        return AioSportLoginResult(
+        return AioPlayLoginResult(
             token = token,
             user = parseUser(user)
         )
     }
 
-    suspend fun account(token: String): AioSportUser {
+    suspend fun account(token: String): AioPlayUser {
         val json = requestJson("/api/v1/account", token = token)
         val user = json.optJSONObject("user")
-            ?: throw AioSportApiException("The server returned no account.")
+            ?: throw AioPlayApiException("The server returned no account.")
         return parseUser(user)
     }
 
     suspend fun logout(token: String) {
-        requestJson("/api/logout", method = "POST", token = token, allowEmpty = true)
+        requestJson("/api/v1/auth/logout", method = "POST", token = token, allowEmpty = true)
     }
 
-    suspend fun capabilities(token: String): AioSportCapabilities {
+    suspend fun capabilities(token: String): AioPlayCapabilities {
         val json = requestJson("/api/v1/bootstrap", token = token)
         val services = json.optJSONObject("services")
         val types = buildSet {
@@ -130,15 +130,15 @@ class AioSportApiClient @Inject constructor(
                 }
             }
         }
-        return AioSportCapabilities(
+        return AioPlayCapabilities(
             sportsEnabled = services?.optJSONObject("sports")?.optBoolean("enabled", false) == true,
             vodEnabled = services?.optJSONObject("vod")?.optBoolean("enabled", false) == true,
             contentTypes = types
         )
     }
 
-    suspend fun catalogs(token: String): List<AioSportCatalog> {
-        val json = requestJson("/manifest.json", token = token)
+    suspend fun catalogs(token: String): List<AioPlayCatalog> {
+        val json = requestJson("/api/v1/sports/catalogs", token = token)
         val array = json.optJSONArray("catalogs") ?: return emptyList()
         return buildList {
             for (i in 0 until array.length()) {
@@ -147,16 +147,15 @@ class AioSportApiClient @Inject constructor(
                 val name = row.optString("name")
                 val type = row.optString("type")
                 if (id.isNotBlank() && name.isNotBlank() && type.isNotBlank()) {
-                    add(AioSportCatalog(id = id, name = name, type = type))
+                    add(AioPlayCatalog(id = id, name = name, type = type))
                 }
             }
         }
     }
 
-    suspend fun catalog(token: String, catalog: AioSportCatalog): List<AioSportItem> {
+    suspend fun catalog(token: String, catalog: AioPlayCatalog): List<AioPlayItem> {
         val id = URLEncoder.encode(catalog.id, "UTF-8").replace("+", "%20")
-        val type = URLEncoder.encode(catalog.type, "UTF-8").replace("+", "%20")
-        val json = requestJson("/catalog/$type/$id.json", token = token)
+        val json = requestJson("/api/v1/sports/catalog/$id", token = token)
         val array = json.optJSONArray("metas") ?: return emptyList()
         return buildList {
             for (i in 0 until array.length()) {
@@ -165,7 +164,7 @@ class AioSportApiClient @Inject constructor(
                 val name = row.optString("name")
                 if (itemId.isBlank() || name.isBlank()) continue
                 add(
-                    AioSportItem(
+                    AioPlayItem(
                         id = itemId,
                         type = row.optString("type").ifBlank { catalog.type },
                         name = name,
@@ -181,10 +180,10 @@ class AioSportApiClient @Inject constructor(
 
     suspend fun startPlayback(
         token: String,
-        item: AioSportItem,
+        item: AioPlayItem,
         contentType: String = "sport_event",
         stremioType: String? = null
-    ): AioSportPlayback {
+    ): AioPlayPlayback {
         val body = JSONObject()
             .put("contentType", contentType)
             .put("id", item.id)
@@ -193,7 +192,7 @@ class AioSportApiClient @Inject constructor(
         return parsePlayback(json)
     }
 
-    suspend fun nextPlayback(token: String, sessionId: String): AioSportPlayback {
+    suspend fun nextPlayback(token: String, sessionId: String): AioPlayPlayback {
         val encoded = URLEncoder.encode(sessionId, "UTF-8").replace("+", "%20")
         val json = requestJson(
             "/api/v1/playback/$encoded/next",
@@ -213,17 +212,17 @@ class AioSportApiClient @Inject constructor(
         )
     }
 
-    private fun parseUser(json: JSONObject): AioSportUser = AioSportUser(
+    private fun parseUser(json: JSONObject): AioPlayUser = AioPlayUser(
         id = json.optString("id"),
         username = json.optString("username"),
         displayName = json.optString("displayName").ifBlank { json.optString("username") },
         role = json.optString("role").ifBlank { "user" }
     )
 
-    private fun parsePlayback(json: JSONObject): AioSportPlayback {
+    private fun parsePlayback(json: JSONObject): AioPlayPlayback {
         val sessionId = json.optString("sessionId")
         val playback = json.optJSONObject("playback")
-            ?: throw AioSportApiException(
+            ?: throw AioPlayApiException(
                 if (json.optBoolean("exhausted", false)) {
                     "No playable source is available."
                 } else {
@@ -232,7 +231,7 @@ class AioSportApiClient @Inject constructor(
             )
         val url = playback.optString("url")
         if (sessionId.isBlank() || url.isBlank()) {
-            throw AioSportApiException("The server returned an incomplete playback target.")
+            throw AioPlayApiException("The server returned an incomplete playback target.")
         }
         val headers = buildMap {
             val objectHeaders = playback.optJSONObject("requestHeaders")
@@ -244,9 +243,9 @@ class AioSportApiClient @Inject constructor(
                 }
             }
         }
-        return AioSportPlayback(
+        return AioPlayPlayback(
             sessionId = sessionId,
-            target = AioSportPlaybackTarget(
+            target = AioPlayPlaybackTarget(
                 kind = playback.optString("kind").ifBlank { "direct" },
                 url = url,
                 requestHeaders = headers

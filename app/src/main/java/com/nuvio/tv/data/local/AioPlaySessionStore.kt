@@ -12,14 +12,14 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.aioSportSessionDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "aiosport_session_store",
+private val Context.aioPlaySessionDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "aioplay_session_store",
     corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler {
         androidx.datastore.preferences.core.emptyPreferences()
     }
 )
 
-data class AioSportStoredSession(
+data class AioPlayStoredSession(
     val token: String,
     val username: String,
     val displayName: String,
@@ -27,7 +27,7 @@ data class AioSportStoredSession(
 )
 
 @Singleton
-class AioSportSessionStore @Inject constructor(
+class AioPlaySessionStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val tokenKey = stringPreferencesKey("token")
@@ -35,12 +35,12 @@ class AioSportSessionStore @Inject constructor(
     private val displayNameKey = stringPreferencesKey("display_name")
     private val roleKey = stringPreferencesKey("role")
 
-    val session: Flow<AioSportStoredSession?> = context.aioSportSessionDataStore.data.map { prefs ->
+    val session: Flow<AioPlayStoredSession?> = context.aioPlaySessionDataStore.data.map { prefs ->
         val token = prefs[tokenKey].orEmpty()
         if (token.isBlank()) {
             null
         } else {
-            AioSportStoredSession(
+            AioPlayStoredSession(
                 token = token,
                 username = prefs[usernameKey].orEmpty(),
                 displayName = prefs[displayNameKey].orEmpty(),
@@ -55,7 +55,7 @@ class AioSportSessionStore @Inject constructor(
         displayName: String,
         role: String
     ) {
-        context.aioSportSessionDataStore.edit { prefs ->
+        context.aioPlaySessionDataStore.edit { prefs ->
             prefs[tokenKey] = token
             prefs[usernameKey] = username
             prefs[displayNameKey] = displayName
@@ -64,6 +64,6 @@ class AioSportSessionStore @Inject constructor(
     }
 
     suspend fun clear() {
-        context.aioSportSessionDataStore.edit { it.clear() }
+        context.aioPlaySessionDataStore.edit { it.clear() }
     }
 }

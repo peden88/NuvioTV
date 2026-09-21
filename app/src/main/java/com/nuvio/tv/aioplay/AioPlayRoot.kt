@@ -1,8 +1,9 @@
 @file:OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)
 
-package com.nuvio.tv.aiosport
+package com.nuvio.tv.aioplay
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +40,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -60,6 +62,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import com.nuvio.tv.R
 import com.nuvio.tv.ui.screens.account.InputField
 import com.nuvio.tv.ui.screens.player.PlayerScreen
 import com.nuvio.tv.ui.screens.settings.PlaybackSettingsScreen
@@ -67,23 +70,23 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import java.net.URLEncoder
 import org.json.JSONObject
 
-private const val HOME_ROUTE = "aiosport_home"
-private const val SETTINGS_ROUTE = "aiosport_settings"
-private const val ACCOUNT_ROUTE = "aiosport_account"
+private const val HOME_ROUTE = "aioplay_home"
+private const val SETTINGS_ROUTE = "aioplay_settings"
+private const val ACCOUNT_ROUTE = "aioplay_account"
 private const val LOADING_ROUTE =
-    "aiosport_loading?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}&contentType={contentType}&sessionId={sessionId}"
+    "aioplay_loading?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}&contentType={contentType}&sessionId={sessionId}"
 private const val PLAYER_ROUTE =
-    "aiosport_player?streamUrl={streamUrl}&title={title}&headers={headers}&contentId={contentId}&contentType={contentType}&contentName={contentName}&poster={poster}&backdrop={backdrop}&videoId={videoId}&aiosportSessionId={aiosportSessionId}&aiosportContentType={aiosportContentType}"
+    "aioplay_player?streamUrl={streamUrl}&title={title}&headers={headers}&contentId={contentId}&contentType={contentType}&contentName={contentName}&poster={poster}&backdrop={backdrop}&videoId={videoId}&aioplaySessionId={aioplaySessionId}&aioplayContentType={aioplayContentType}"
 
 private fun encode(value: String?): String =
     URLEncoder.encode(value.orEmpty(), "UTF-8").replace("+", "%20")
 
 private fun loadingRoute(
-    item: AioSportItem,
+    item: AioPlayItem,
     contentType: String,
     sessionId: String = ""
 ): String =
-    "aiosport_loading" +
+    "aioplay_loading" +
         "?itemId=" + encode(item.id) +
         "&title=" + encode(item.name) +
         "&poster=" + encode(item.poster) +
@@ -92,12 +95,12 @@ private fun loadingRoute(
         "&sessionId=" + encode(sessionId)
 
 private fun playerRoute(
-    item: AioSportItem,
+    item: AioPlayItem,
     contentType: String,
-    playback: AioSportPlayback
+    playback: AioPlayPlayback
 ): String {
     val headers = JSONObject(playback.target.requestHeaders).toString()
-    return "aiosport_player" +
+    return "aioplay_player" +
         "?streamUrl=" + encode(playback.target.url) +
         "&title=" + encode(item.name) +
         "&headers=" + encode(headers) +
@@ -107,14 +110,14 @@ private fun playerRoute(
         "&poster=" + encode(item.poster) +
         "&backdrop=" + encode(item.background) +
         "&videoId=" + encode(item.id) +
-        "&aiosportSessionId=" + encode(playback.sessionId) +
-        "&aiosportContentType=" + encode(contentType)
+        "&aioplaySessionId=" + encode(playback.sessionId) +
+        "&aioplayContentType=" + encode(contentType)
 }
 
 @Composable
-fun AioSportRoot(
+fun AioPlayRoot(
     onExit: () -> Unit,
-    viewModel: AioSportViewModel = hiltViewModel()
+    viewModel: AioPlayViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
 
@@ -124,14 +127,14 @@ fun AioSportRoot(
             colors = SurfaceDefaults.colors(containerColor = NuvioTheme.colors.Background)
         ) {
             when {
-                state.checkingSession -> AioSportCenteredStatus("Signing in…")
-                !state.signedIn -> AioSportLoginScreen(
+                state.checkingSession -> AioPlayCenteredStatus("Signing in…")
+                !state.signedIn -> AioPlayLoginScreen(
                     busy = state.loginBusy,
                     error = state.error,
                     onSignIn = viewModel::signIn,
                     onExit = onExit
                 )
-                else -> AioSportSignedInApp(
+                else -> AioPlaySignedInApp(
                     state = state,
                     viewModel = viewModel
                 )
@@ -141,7 +144,7 @@ fun AioSportRoot(
 }
 
 @Composable
-private fun AioSportLoginScreen(
+private fun AioPlayLoginScreen(
     busy: Boolean,
     error: String?,
     onSignIn: (String, String) -> Unit,
@@ -170,14 +173,23 @@ private fun AioSportLoginScreen(
                 .padding(34.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Image(
+                painter = painterResource(id = R.drawable.aioplay_brand),
+                contentDescription = "AIOPlay",
+                modifier = Modifier
+                    .width(104.dp)
+                    .aspectRatio(1f)
+                    .align(Alignment.CenterHorizontally),
+                contentScale = ContentScale.Fit
+            )
             Text(
-                text = "AIOSport TV",
+                text = "AIOPlay",
                 style = MaterialTheme.typography.headlineMedium,
                 color = NuvioTheme.colors.TextPrimary,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "Sign in with your AIOSport account.",
+                text = "Sign in to AIOPlay.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = NuvioTheme.colors.TextSecondary
             )
@@ -228,9 +240,9 @@ private fun AioSportLoginScreen(
 }
 
 @Composable
-private fun AioSportSignedInApp(
-    state: AioSportUiState,
-    viewModel: AioSportViewModel
+private fun AioPlaySignedInApp(
+    state: AioPlayUiState,
+    viewModel: AioPlayViewModel
 ) {
     val navController = rememberNavController()
 
@@ -239,7 +251,7 @@ private fun AioSportSignedInApp(
         startDestination = HOME_ROUTE
     ) {
         composable(HOME_ROUTE) {
-            AioSportHomeScreen(
+            AioPlayHomeScreen(
                 state = state,
                 onCatalog = viewModel::selectCatalog,
                 onRefresh = viewModel::refreshCurrentCatalog,
@@ -265,7 +277,7 @@ private fun AioSportSignedInApp(
         }
 
         composable(ACCOUNT_ROUTE) {
-            AioSportAccountScreen(
+            AioPlayAccountScreen(
                 user = state.user,
                 vodEnabled = state.capabilities?.vodEnabled == true,
                 onBack = { navController.popBackStack() },
@@ -284,7 +296,7 @@ private fun AioSportSignedInApp(
                 navArgument("sessionId") { type = NavType.StringType; defaultValue = "" }
             )
         ) { entry ->
-            val item = AioSportItem(
+            val item = AioPlayItem(
                 id = entry.arguments?.getString("itemId").orEmpty(),
                 type = "tv",
                 name = entry.arguments?.getString("title").orEmpty(),
@@ -298,7 +310,7 @@ private fun AioSportSignedInApp(
                 ?: "sport_event"
             val sessionId = entry.arguments?.getString("sessionId").orEmpty()
 
-            AioSportPlaybackLoadingScreen(
+            AioPlayPlaybackLoadingScreen(
                 item = item,
                 contentType = contentType,
                 sessionId = sessionId,
@@ -327,13 +339,13 @@ private fun AioSportSignedInApp(
                 navArgument("poster") { type = NavType.StringType; defaultValue = "" },
                 navArgument("backdrop") { type = NavType.StringType; defaultValue = "" },
                 navArgument("videoId") { type = NavType.StringType; defaultValue = "" },
-                navArgument("aiosportSessionId") { type = NavType.StringType; defaultValue = "" },
-                navArgument("aiosportContentType") { type = NavType.StringType; defaultValue = "sport_event" }
+                navArgument("aioplaySessionId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("aioplayContentType") { type = NavType.StringType; defaultValue = "sport_event" }
             )
         ) { entry ->
             val args = entry.arguments
-            val sessionId = args?.getString("aiosportSessionId").orEmpty()
-            val item = AioSportItem(
+            val sessionId = args?.getString("aioplaySessionId").orEmpty()
+            val item = AioPlayItem(
                 id = args?.getString("contentId").orEmpty(),
                 type = "tv",
                 name = args?.getString("title").orEmpty(),
@@ -342,7 +354,7 @@ private fun AioSportSignedInApp(
                 background = args?.getString("backdrop")?.takeIf { it.isNotBlank() },
                 logo = null
             )
-            val fallbackContentType = args?.getString("aiosportContentType")
+            val fallbackContentType = args?.getString("aioplayContentType")
                 ?.takeIf { it.isNotBlank() }
                 ?: "sport_event"
 
@@ -376,11 +388,11 @@ private fun AioSportSignedInApp(
 }
 
 @Composable
-private fun AioSportHomeScreen(
-    state: AioSportUiState,
-    onCatalog: (AioSportCatalog) -> Unit,
+private fun AioPlayHomeScreen(
+    state: AioPlayUiState,
+    onCatalog: (AioPlayCatalog) -> Unit,
     onRefresh: () -> Unit,
-    onPlay: (AioSportItem) -> Unit,
+    onPlay: (AioPlayItem) -> Unit,
     onSettings: () -> Unit,
     onAccount: () -> Unit
 ) {
@@ -398,7 +410,7 @@ private fun AioSportHomeScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "AIOSport TV",
+                text = "AIOPlay TV",
                 style = MaterialTheme.typography.titleLarge,
                 color = NuvioTheme.colors.TextPrimary,
                 fontWeight = FontWeight.Bold,
@@ -406,7 +418,7 @@ private fun AioSportHomeScreen(
             )
 
             state.catalogs.forEach { catalog ->
-                AioSportNavCard(
+                AioPlayNavCard(
                     text = catalog.name,
                     selected = state.selectedCatalogId == catalog.id,
                     onClick = { onCatalog(catalog) }
@@ -415,12 +427,12 @@ private fun AioSportHomeScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            AioSportNavCard(
+            AioPlayNavCard(
                 text = "Playback Settings",
                 selected = false,
                 onClick = onSettings
             )
-            AioSportNavCard(
+            AioPlayNavCard(
                 text = state.user?.displayName?.ifBlank { state.user.username } ?: "Account",
                 selected = false,
                 onClick = onAccount
@@ -470,7 +482,7 @@ private fun AioSportHomeScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        AioSportLoadingLabel("Loading…")
+                        AioPlayLoadingLabel("Loading…")
                     }
                 }
                 state.items.isEmpty() -> {
@@ -493,7 +505,7 @@ private fun AioSportHomeScreen(
                         verticalArrangement = Arrangement.spacedBy(18.dp)
                     ) {
                         items(state.items, key = { it.id }) { item ->
-                            AioSportContentCard(
+                            AioPlayContentCard(
                                 item = item,
                                 onClick = { onPlay(item) }
                             )
@@ -506,7 +518,7 @@ private fun AioSportHomeScreen(
 }
 
 @Composable
-private fun AioSportNavCard(
+private fun AioPlayNavCard(
     text: String,
     selected: Boolean,
     onClick: () -> Unit
@@ -544,8 +556,8 @@ private fun AioSportNavCard(
 }
 
 @Composable
-private fun AioSportContentCard(
-    item: AioSportItem,
+private fun AioPlayContentCard(
+    item: AioPlayItem,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(12.dp)
@@ -626,12 +638,12 @@ private fun AioSportContentCard(
 }
 
 @Composable
-private fun AioSportPlaybackLoadingScreen(
-    item: AioSportItem,
+private fun AioPlayPlaybackLoadingScreen(
+    item: AioPlayItem,
     contentType: String,
     sessionId: String,
-    viewModel: AioSportViewModel,
-    onReady: (AioSportPlayback) -> Unit,
+    viewModel: AioPlayViewModel,
+    onReady: (AioPlayPlayback) -> Unit,
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
@@ -676,7 +688,7 @@ private fun AioSportPlaybackLoadingScreen(
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             if (error == null) {
-                AioSportLoadingLabel(
+                AioPlayLoadingLabel(
                     if (sessionId.isBlank()) {
                         "Finding the best available stream…"
                     } else {
@@ -703,7 +715,7 @@ private fun AioSportPlaybackLoadingScreen(
 }
 
 @Composable
-private fun AioSportLoadingLabel(text: String) {
+private fun AioPlayLoadingLabel(text: String) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -718,8 +730,8 @@ private fun AioSportLoadingLabel(text: String) {
 }
 
 @Composable
-private fun AioSportAccountScreen(
-    user: AioSportUser?,
+private fun AioPlayAccountScreen(
+    user: AioPlayUser?,
     vodEnabled: Boolean,
     onBack: () -> Unit,
     onSignOut: () -> Unit
@@ -775,13 +787,13 @@ private fun AioSportAccountScreen(
 }
 
 @Composable
-private fun AioSportCenteredStatus(text: String) {
+private fun AioPlayCenteredStatus(text: String) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(NuvioTheme.colors.Background),
         contentAlignment = Alignment.Center
     ) {
-        AioSportLoadingLabel(text)
+        AioPlayLoadingLabel(text)
     }
 }

@@ -109,9 +109,9 @@ val doviPrebuiltRootPath = resolveProperty(
     "DV7/libdovi"
 )
 val sponsorNames = resolveProperty(devProperties, localProperties, "SPONSOR_NAMES", "ragmehos.")
-val aioSportApiBaseUrl = providers.environmentVariable("AIOSPORT_API_BASE_URL").orNull
+val aioPlayApiBaseUrl = providers.environmentVariable("AIOPLAY_API_BASE_URL").orNull
     ?.trim()?.takeIf { it.isNotBlank() }
-    ?: resolveProperty(devProperties, localProperties, "AIOSPORT_API_BASE_URL")
+    ?: resolveProperty(devProperties, localProperties, "AIOPLAY_API_BASE_URL")
 
 fun env(name: String): String? = providers.environmentVariable(name).orNull
 
@@ -185,7 +185,7 @@ android {
         buildConfigField("String", "PLAYBACK_REPORTS_BASE_URL", buildConfigString(localProperties.getProperty("PLAYBACK_REPORTS_BASE_URL", "")))
         buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${localProperties.getProperty("PREMIUMIZE_CLIENT_ID", "")}\"")
         buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
-        buildConfigField("String", "AIOSPORT_API_BASE_URL", buildConfigString(aioSportApiBaseUrl))
+        buildConfigField("String", "AIOPLAY_API_BASE_URL", buildConfigString(aioPlayApiBaseUrl))
 
         // In-app updater (GitHub Releases)
         buildConfigField("String", "GITHUB_OWNER", "\"Cxsmo-ai\"")
@@ -200,7 +200,7 @@ android {
     productFlavors {
         create("full") {
             dimension = "distribution"
-            buildConfigField("boolean", "AIOSPORT_MODE", "false")
+            buildConfigField("boolean", "AIOPLAY_MODE", "false")
             buildConfigField("boolean", "FEATURE_PLUGINS_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "true")
@@ -209,12 +209,12 @@ android {
             buildConfigField("boolean", "FEATURE_CUSTOM_SERVER_CONNECTIONS_ENABLED", "true")
         }
 
-        create("aiosport") {
+        create("aioplay") {
             dimension = "distribution"
-            applicationId = "com.peden88.aiosporttv"
-            versionNameSuffix = "-aiosport"
-            resValue("string", "app_name", "AIOSport TV")
-            buildConfigField("boolean", "AIOSPORT_MODE", "true")
+            applicationId = "com.peden88.aioplay"
+            versionNameSuffix = "-aioplay"
+            resValue("string", "app_name", "AIOPlay")
+            buildConfigField("boolean", "AIOPLAY_MODE", "true")
             buildConfigField("boolean", "FEATURE_PLUGINS_ENABLED", "false")
             buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "false")
             buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "false")

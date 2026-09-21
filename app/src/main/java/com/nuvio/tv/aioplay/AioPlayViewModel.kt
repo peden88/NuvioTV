@@ -1,8 +1,8 @@
-package com.nuvio.tv.aiosport
+package com.nuvio.tv.aioplay
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.nuvio.tv.data.local.AioSportSessionStore
+import com.nuvio.tv.data.local.AioPlaySessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,26 +11,26 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-data class AioSportUiState(
+data class AioPlayUiState(
     val checkingSession: Boolean = true,
     val signedIn: Boolean = false,
     val loginBusy: Boolean = false,
-    val user: AioSportUser? = null,
-    val capabilities: AioSportCapabilities? = null,
-    val catalogs: List<AioSportCatalog> = emptyList(),
+    val user: AioPlayUser? = null,
+    val capabilities: AioPlayCapabilities? = null,
+    val catalogs: List<AioPlayCatalog> = emptyList(),
     val selectedCatalogId: String? = null,
-    val items: List<AioSportItem> = emptyList(),
+    val items: List<AioPlayItem> = emptyList(),
     val loadingCatalog: Boolean = false,
     val error: String? = null
 )
 
 @HiltViewModel
-class AioSportViewModel @Inject constructor(
-    private val api: AioSportApiClient,
-    private val sessionStore: AioSportSessionStore
+class AioPlayViewModel @Inject constructor(
+    private val api: AioPlayApiClient,
+    private val sessionStore: AioPlaySessionStore
 ) : ViewModel() {
-    private val _state = MutableStateFlow(AioSportUiState())
-    val state: StateFlow<AioSportUiState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(AioPlayUiState())
+    val state: StateFlow<AioPlayUiState> = _state.asStateFlow()
 
     private var token: String? = null
 
@@ -40,16 +40,16 @@ class AioSportViewModel @Inject constructor(
 
     private suspend fun restoreSession() {
         if (!api.isConfigured()) {
-            _state.value = AioSportUiState(
+            _state.value = AioPlayUiState(
                 checkingSession = false,
-                error = "AIOSport server URL is not configured in this APK."
+                error = "AIOPlay server URL is not configured in this APK."
             )
             return
         }
 
         val stored = sessionStore.session.first()
         if (stored == null) {
-            _state.value = AioSportUiState(checkingSession = false)
+            _state.value = AioPlayUiState(checkingSession = false)
             return
         }
 
@@ -60,7 +60,7 @@ class AioSportViewModel @Inject constructor(
         }.onFailure {
             token = null
             sessionStore.clear()
-            _state.value = AioSportUiState(checkingSession = false)
+            _state.value = AioPlayUiState(checkingSession = false)
         }
     }
 
@@ -90,7 +90,7 @@ class AioSportViewModel @Inject constructor(
         }
     }
 
-    private suspend fun enterSignedInState(user: AioSportUser) {
+    private suspend fun enterSignedInState(user: AioPlayUser) {
         val activeToken = token ?: return
         val capabilities = api.capabilities(activeToken)
         val catalogs = if (capabilities.sportsEnabled) {
@@ -103,7 +103,7 @@ class AioSportViewModel @Inject constructor(
         val preferred = catalogs.firstOrNull { it.id == "nuvio_sports_live" }
             ?: catalogs.firstOrNull()
 
-        _state.value = AioSportUiState(
+        _state.value = AioPlayUiState(
             checkingSession = false,
             signedIn = true,
             user = user,
@@ -118,7 +118,7 @@ class AioSportViewModel @Inject constructor(
         }
     }
 
-    fun selectCatalog(catalog: AioSportCatalog) {
+    fun selectCatalog(catalog: AioPlayCatalog) {
         if (_state.value.selectedCatalogId == catalog.id && _state.value.items.isNotEmpty()) return
         viewModelScope.launch { loadCatalogInternal(catalog) }
     }
@@ -130,7 +130,7 @@ class AioSportViewModel @Inject constructor(
         viewModelScope.launch { loadCatalogInternal(selected) }
     }
 
-    private suspend fun loadCatalogInternal(catalog: AioSportCatalog) {
+    private suspend fun loadCatalogInternal(catalog: AioPlayCatalog) {
         val activeToken = token ?: return
         _state.value = _state.value.copy(
             selectedCatalogId = catalog.id,
@@ -145,10 +145,10 @@ class AioSportViewModel @Inject constructor(
                 )
             }
             .onFailure { error ->
-                if ((error as? AioSportApiException)?.statusCode == 403) {
+                if ((error as? AioPlayApiException)?.statusCode == 403) {
                     token = null
                     sessionStore.clear()
-                    _state.value = AioSportUiState(checkingSession = false)
+                    _state.value = AioPlayUiState(checkingSession = false)
                 } else {
                     _state.value = _state.value.copy(
                         loadingCatalog = false,
@@ -166,16 +166,16 @@ class AioSportViewModel @Inject constructor(
                 runCatching { api.logout(oldToken) }
             }
             sessionStore.clear()
-            _state.value = AioSportUiState(checkingSession = false)
+            _state.value = AioPlayUiState(checkingSession = false)
         }
     }
 
     suspend fun startPlayback(
-        item: AioSportItem,
+        item: AioPlayItem,
         contentType: String = "sport_event"
-    ): Result<AioSportPlayback> {
+    ): Result<AioPlayPlayback> {
         val activeToken = token ?: return Result.failure(
-            AioSportApiException("Your session has expired.", 403)
+            AioPlayApiException("Your session has expired.", 403)
         )
         return runCatching {
             api.startPlayback(
@@ -186,9 +186,9 @@ class AioSportViewModel @Inject constructor(
         }
     }
 
-    suspend fun nextPlayback(sessionId: String): Result<AioSportPlayback> {
+    suspend fun nextPlayback(sessionId: String): Result<AioPlayPlayback> {
         val activeToken = token ?: return Result.failure(
-            AioSportApiException("Your session has expired.", 403)
+            AioPlayApiException("Your session has expired.", 403)
         )
         return runCatching { api.nextPlayback(activeToken, sessionId) }
     }

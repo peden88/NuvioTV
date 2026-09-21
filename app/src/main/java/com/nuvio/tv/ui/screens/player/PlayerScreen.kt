@@ -915,7 +915,7 @@ fun PlayerScreen(
             } else {
                 uiState.loadingMessage.takeIf { uiState.showPlayerLoadingStatus || uiState.isTorrentStream }
             },
-            sourceLine = if (BuildConfig.AIOSPORT_MODE) {
+            sourceLine = if (BuildConfig.AIOPLAY_MODE) {
                 null
             } else {
                 val provider = resolveStreamProvider(
@@ -1346,7 +1346,7 @@ fun PlayerScreen(
         }
 
         AnimatedVisibility(
-            visible = !BuildConfig.AIOSPORT_MODE && uiState.showStreamSourceIndicator,
+            visible = !BuildConfig.AIOPLAY_MODE && uiState.showStreamSourceIndicator,
             enter = fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.fast)),
             exit = fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.fast)),
             modifier = Modifier
@@ -1484,7 +1484,7 @@ fun PlayerScreen(
 
         // Sources panel scrim
         AnimatedVisibility(
-            visible = !BuildConfig.AIOSPORT_MODE && uiState.showSourcesPanel && uiState.error == null,
+            visible = !BuildConfig.AIOPLAY_MODE && uiState.showSourcesPanel && uiState.error == null,
             enter = fadeIn(animationSpec = tween(120)),
             exit = fadeOut(animationSpec = tween(120))
 ) {
@@ -1497,7 +1497,7 @@ fun PlayerScreen(
 
         // Sources panel (slides in from right)
         AnimatedVisibility(
-            visible = !BuildConfig.AIOSPORT_MODE && uiState.showSourcesPanel && uiState.error == null,
+            visible = !BuildConfig.AIOPLAY_MODE && uiState.showSourcesPanel && uiState.error == null,
             enter = slideInHorizontally(
                 animationSpec = tween(220),
                 initialOffsetX = { it }
@@ -2326,7 +2326,7 @@ private fun PlayerControlsOverlay(
                             onFocused = onResetHideTimer
                         )
                         }
-                        if (!BuildConfig.AIOSPORT_MODE) {
+                        if (!BuildConfig.AIOPLAY_MODE) {
                             ControlButton(
                                 icon = Icons.Default.Cloud,
                                 contentDescription = stringResource(R.string.cd_sources),

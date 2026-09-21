@@ -1,30 +1,30 @@
-package com.nuvio.tv.aiosport
+package com.nuvio.tv.aioplay
 
-data class AioSportUser(
+data class AioPlayUser(
     val id: String,
     val username: String,
     val displayName: String,
     val role: String
 )
 
-data class AioSportLoginResult(
+data class AioPlayLoginResult(
     val token: String,
-    val user: AioSportUser
+    val user: AioPlayUser
 )
 
-data class AioSportCapabilities(
+data class AioPlayCapabilities(
     val sportsEnabled: Boolean,
     val vodEnabled: Boolean,
     val contentTypes: Set<String>
 )
 
-data class AioSportCatalog(
+data class AioPlayCatalog(
     val id: String,
     val name: String,
     val type: String
 )
 
-data class AioSportItem(
+data class AioPlayItem(
     val id: String,
     val type: String,
     val name: String,
@@ -34,13 +34,13 @@ data class AioSportItem(
     val logo: String?
 )
 
-data class AioSportPlaybackTarget(
+data class AioPlayPlaybackTarget(
     val kind: String,
     val url: String,
     val requestHeaders: Map<String, String>
 )
 
-data class AioSportPlayback(
+data class AioPlayPlayback(
     val sessionId: String,
-    val target: AioSportPlaybackTarget
+    val target: AioPlayPlaybackTarget
 )

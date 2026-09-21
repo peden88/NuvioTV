@@ -3,6 +3,7 @@ package com.nuvio.tv.aioplay
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.data.local.AioPlaySessionStore
+import com.nuvio.tv.data.local.PlayerSettingsDataStore
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -37,7 +38,8 @@ data class AioPlayUiState(
 class AioPlayViewModel @Inject constructor(
     private val api: AioPlayApiClient,
     private val sessionStore: AioPlaySessionStore,
-    private val watchProgressRepository: WatchProgressRepository
+    private val watchProgressRepository: WatchProgressRepository,
+    private val playerSettingsDataStore: PlayerSettingsDataStore
 ) : ViewModel() {
     private val _state = MutableStateFlow(AioPlayUiState())
     val state: StateFlow<AioPlayUiState> = _state.asStateFlow()
@@ -54,7 +56,10 @@ class AioPlayViewModel @Inject constructor(
     )
 
     init {
-        viewModelScope.launch { restoreSession() }
+        viewModelScope.launch {
+            playerSettingsDataStore.applyAioPlayDefaultsIfUnset()
+            restoreSession()
+        }
         viewModelScope.launch {
             watchProgressRepository.continueWatching.collectLatest { rows ->
                 continueWatchingItems = rows.map { progress ->

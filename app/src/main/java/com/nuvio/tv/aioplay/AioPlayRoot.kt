@@ -24,7 +24,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -82,11 +85,11 @@ private enum class AioPlayHomeFocusZone {
 private const val SETTINGS_ROUTE = "aioplay_settings"
 private const val ACCOUNT_ROUTE = "aioplay_account"
 private const val SERIES_ROUTE =
-    "aioplay_series?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}"
+    "aioplay_series?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}&logo={logo}"
 private const val LOADING_ROUTE =
-    "aioplay_loading?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}&contentType={contentType}&sessionId={sessionId}"
+    "aioplay_loading?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}&logo={logo}&contentType={contentType}&sessionId={sessionId}"
 private const val PLAYER_ROUTE =
-    "aioplay_player?streamUrl={streamUrl}&title={title}&headers={headers}&contentId={contentId}&contentType={contentType}&contentName={contentName}&poster={poster}&backdrop={backdrop}&videoId={videoId}&aioplaySessionId={aioplaySessionId}&aioplayContentType={aioplayContentType}"
+    "aioplay_player?streamUrl={streamUrl}&title={title}&headers={headers}&contentId={contentId}&contentType={contentType}&contentName={contentName}&poster={poster}&backdrop={backdrop}&logo={logo}&videoId={videoId}&aioplaySessionId={aioplaySessionId}&aioplayContentType={aioplayContentType}"
 
 private fun encode(value: String?): String =
     URLEncoder.encode(value.orEmpty(), "UTF-8").replace("+", "%20")
@@ -101,6 +104,8 @@ private fun loadingRoute(
         "&title=" + encode(item.name) +
         "&poster=" + encode(item.poster) +
         "&backdrop=" + encode(item.background) +
+        "&logo=" + encode(item.logo) +
+        "&logo=" + encode(item.logo) +
         "&contentType=" + encode(contentType) +
         "&sessionId=" + encode(sessionId)
 
@@ -126,6 +131,7 @@ private fun playerRoute(
         "&contentName=" + encode(item.name) +
         "&poster=" + encode(item.poster) +
         "&backdrop=" + encode(item.background) +
+        "&logo=" + encode(item.logo) +
         "&videoId=" + encode(item.id) +
         "&aioplaySessionId=" + encode(playback.sessionId) +
         "&aioplayContentType=" + encode(contentType)
@@ -272,7 +278,6 @@ private fun AioPlaySignedInApp(
                 state = state,
                 onSection = viewModel::selectSection,
                 onCatalog = viewModel::selectCatalog,
-                onRefresh = viewModel::refreshCurrentCatalog,
                 onItem = { item ->
                     when (state.selectedSection) {
                         AioPlaySection.LIVE -> {
@@ -321,6 +326,7 @@ private fun AioPlaySignedInApp(
                 user = state.user,
                 vodEnabled = state.capabilities?.vodEnabled == true,
                 onBack = { navController.popBackStack() },
+                onRefresh = viewModel::refreshCurrentCatalog,
                 onSignOut = viewModel::signOut
             )
         }
@@ -331,7 +337,8 @@ private fun AioPlaySignedInApp(
                 navArgument("itemId") { type = NavType.StringType; defaultValue = "" },
                 navArgument("title") { type = NavType.StringType; defaultValue = "" },
                 navArgument("poster") { type = NavType.StringType; defaultValue = "" },
-                navArgument("backdrop") { type = NavType.StringType; defaultValue = "" }
+                navArgument("backdrop") { type = NavType.StringType; defaultValue = "" },
+                navArgument("logo") { type = NavType.StringType; defaultValue = "" }
             )
         ) { entry ->
             val series = AioPlayItem(
@@ -341,7 +348,7 @@ private fun AioPlaySignedInApp(
                 description = null,
                 poster = entry.arguments?.getString("poster")?.takeIf { it.isNotBlank() },
                 background = entry.arguments?.getString("backdrop")?.takeIf { it.isNotBlank() },
-                logo = null
+                logo = entry.arguments?.getString("logo")?.takeIf { it.isNotBlank() }
             )
             AioPlaySeriesScreen(
                 series = series,
@@ -360,6 +367,7 @@ private fun AioPlaySignedInApp(
                 navArgument("title") { type = NavType.StringType; defaultValue = "" },
                 navArgument("poster") { type = NavType.StringType; defaultValue = "" },
                 navArgument("backdrop") { type = NavType.StringType; defaultValue = "" },
+                navArgument("logo") { type = NavType.StringType; defaultValue = "" },
                 navArgument("contentType") { type = NavType.StringType; defaultValue = "sport_event" },
                 navArgument("sessionId") { type = NavType.StringType; defaultValue = "" }
             )
@@ -371,7 +379,7 @@ private fun AioPlaySignedInApp(
                 description = null,
                 poster = entry.arguments?.getString("poster")?.takeIf { it.isNotBlank() },
                 background = entry.arguments?.getString("backdrop")?.takeIf { it.isNotBlank() },
-                logo = null
+                logo = entry.arguments?.getString("logo")?.takeIf { it.isNotBlank() }
             )
             val contentType = entry.arguments?.getString("contentType")
                 ?.takeIf { it.isNotBlank() }
@@ -406,6 +414,7 @@ private fun AioPlaySignedInApp(
                 navArgument("contentName") { type = NavType.StringType; defaultValue = "" },
                 navArgument("poster") { type = NavType.StringType; defaultValue = "" },
                 navArgument("backdrop") { type = NavType.StringType; defaultValue = "" },
+                navArgument("logo") { type = NavType.StringType; defaultValue = "" },
                 navArgument("videoId") { type = NavType.StringType; defaultValue = "" },
                 navArgument("aioplaySessionId") { type = NavType.StringType; defaultValue = "" },
                 navArgument("aioplayContentType") { type = NavType.StringType; defaultValue = "sport_event" }
@@ -420,7 +429,7 @@ private fun AioPlaySignedInApp(
                 description = null,
                 poster = args?.getString("poster")?.takeIf { it.isNotBlank() },
                 background = args?.getString("backdrop")?.takeIf { it.isNotBlank() },
-                logo = null
+                logo = args?.getString("logo")?.takeIf { it.isNotBlank() }
             )
             val fallbackContentType = args?.getString("aioplayContentType")
                 ?.takeIf { it.isNotBlank() }
@@ -460,7 +469,6 @@ private fun AioPlayHomeScreen(
     state: AioPlayUiState,
     onSection: (AioPlaySection) -> Unit,
     onCatalog: (AioPlayCatalog) -> Unit,
-    onRefresh: () -> Unit,
     onItem: (AioPlayItem) -> Unit,
     onSettings: () -> Unit,
     onAccount: () -> Unit
@@ -468,6 +476,8 @@ private fun AioPlayHomeScreen(
     val liveFocus = remember { FocusRequester() }
     val vodFocus = remember { FocusRequester() }
     val continueFocus = remember { FocusRequester() }
+    val firstContentFocus = remember(state.selectedSection, state.items.firstOrNull()?.id) { FocusRequester() }
+    var pendingSectionFocus by remember { mutableStateOf<AioPlaySection?>(null) }
     val navFocusRequesters = remember(state.catalogs.map { it.selectionKey }) {
         state.catalogs.associate { it.selectionKey to FocusRequester() }
     }
@@ -489,6 +499,32 @@ private fun AioPlayHomeScreen(
             it.selectionKey == state.selectedCatalogId
         } ?: state.catalogs.firstOrNull() ?: return
         runCatching { navFocusRequesters[selected.selectionKey]?.requestFocus() }
+    }
+
+    LaunchedEffect(
+        pendingSectionFocus,
+        state.selectedSection,
+        state.catalogs,
+        state.items
+    ) {
+        val requested = pendingSectionFocus ?: return@LaunchedEffect
+        if (requested != state.selectedSection) return@LaunchedEffect
+
+        when (requested) {
+            AioPlaySection.CONTINUE -> {
+                if (state.items.isNotEmpty()) {
+                    runCatching { firstContentFocus.requestFocus() }
+                    pendingSectionFocus = null
+                }
+            }
+            AioPlaySection.LIVE,
+            AioPlaySection.VOD -> {
+                if (state.catalogs.isNotEmpty()) {
+                    focusFirstNavItem()
+                    pendingSectionFocus = null
+                }
+            }
+        }
     }
 
     BackHandler {
@@ -562,14 +598,6 @@ private fun AioPlayHomeScreen(
             }
 
             AioPlayNavCard(
-                text = "Playback Settings",
-                selected = false,
-                onClick = onSettings,
-                modifier = Modifier.onFocusChanged {
-                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.NAV
-                }
-            )
-            AioPlayNavCard(
                 text = state.user?.displayName?.ifBlank { state.user.username } ?: "Account",
                 selected = false,
                 onClick = onAccount,
@@ -585,45 +613,74 @@ private fun AioPlayHomeScreen(
                 .fillMaxHeight()
                 .padding(horizontal = 24.dp, vertical = 18.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                if (state.capabilities?.sportsEnabled == true) {
-                    AioPlaySectionCard(
-                        text = "Live",
-                        selected = state.selectedSection == AioPlaySection.LIVE,
-                        onClick = { onSection(AioPlaySection.LIVE) },
-                        modifier = Modifier
-                            .focusRequester(liveFocus)
-                            .onFocusChanged {
-                                if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
-                            }
-                    )
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (state.capabilities?.sportsEnabled == true) {
+                        AioPlaySectionCard(
+                            text = "Live",
+                            selected = state.selectedSection == AioPlaySection.LIVE,
+                            onClick = {
+                                pendingSectionFocus = AioPlaySection.LIVE
+                                onSection(AioPlaySection.LIVE)
+                            },
+                            modifier = Modifier
+                                .focusRequester(liveFocus)
+                                .onFocusChanged {
+                                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                                }
+                        )
+                    }
+                    if (state.capabilities?.vodEnabled == true) {
+                        Spacer(modifier = Modifier.width(10.dp))
+                        AioPlaySectionCard(
+                            text = "VOD",
+                            selected = state.selectedSection == AioPlaySection.VOD,
+                            onClick = {
+                                pendingSectionFocus = AioPlaySection.VOD
+                                onSection(AioPlaySection.VOD)
+                            },
+                            modifier = Modifier
+                                .focusRequester(vodFocus)
+                                .onFocusChanged {
+                                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                                }
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        AioPlaySectionCard(
+                            text = "Continue Watching",
+                            selected = state.selectedSection == AioPlaySection.CONTINUE,
+                            onClick = {
+                                pendingSectionFocus = AioPlaySection.CONTINUE
+                                onSection(AioPlaySection.CONTINUE)
+                            },
+                            modifier = Modifier
+                                .focusRequester(continueFocus)
+                                .onFocusChanged {
+                                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                                }
+                        )
+                    }
                 }
-                if (state.capabilities?.vodEnabled == true) {
-                    Spacer(modifier = Modifier.width(10.dp))
-                    AioPlaySectionCard(
-                        text = "VOD",
-                        selected = state.selectedSection == AioPlaySection.VOD,
-                        onClick = { onSection(AioPlaySection.VOD) },
-                        modifier = Modifier
-                            .focusRequester(vodFocus)
-                            .onFocusChanged {
-                                if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
-                            }
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    AioPlaySectionCard(
-                        text = "Continue Watching",
-                        selected = state.selectedSection == AioPlaySection.CONTINUE,
-                        onClick = { onSection(AioPlaySection.CONTINUE) },
-                        modifier = Modifier
-                            .focusRequester(continueFocus)
-                            .onFocusChanged {
-                                if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
-                            }
+
+                Button(
+                    onClick = onSettings,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .width(52.dp)
+                        .onFocusChanged {
+                            if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                        },
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Playback settings"
                     )
                 }
             }
@@ -646,9 +703,6 @@ private fun AioPlayHomeScreen(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
-                Button(onClick = onRefresh) {
-                    Text("Refresh")
-                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -698,11 +752,19 @@ private fun AioPlayHomeScreen(
                                 item = item,
                                 posterMode = posterMode,
                                 onClick = { onItem(item) },
-                                modifier = Modifier.onFocusChanged {
-                                    if (it.isFocused) {
-                                        focusZone = AioPlayHomeFocusZone.CONTENT
+                                modifier = Modifier
+                                    .then(
+                                        if (item.id == state.items.firstOrNull()?.id) {
+                                            Modifier.focusRequester(firstContentFocus)
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.CONTENT
+                                        }
                                     }
-                                }
                             )
                         }
                     }
@@ -998,7 +1060,7 @@ private fun AioPlaySeriesScreen(
                                             description = null,
                                             poster = details?.item?.poster ?: series.poster,
                                             background = details?.item?.background ?: series.background,
-                                            logo = null
+                                            logo = details?.item?.logo ?: series.logo
                                         )
                                     )
                                 }
@@ -1108,6 +1170,7 @@ private fun AioPlayAccountScreen(
     user: AioPlayUser?,
     vodEnabled: Boolean,
     onBack: () -> Unit,
+    onRefresh: () -> Unit,
     onSignOut: () -> Unit
 ) {
     BackHandler(onBack = onBack)
@@ -1144,6 +1207,11 @@ private fun AioPlayAccountScreen(
                 color = NuvioTheme.colors.TextSecondary
             )
             Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = onRefresh
+            ) {
+                Text("Refresh content")
+            }
             Button(
                 onClick = onSignOut,
                 colors = ButtonDefaults.colors(

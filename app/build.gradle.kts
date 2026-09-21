@@ -122,6 +122,10 @@ fun truthy(value: String?): Boolean {
 }
 
 val buildingAppBundle = gradle.startParameter.taskNames.any { it.contains("bundle", ignoreCase = true) }
+val aioplayArm64Only = truthy(
+    providers.gradleProperty("aioplayArm64Only").orNull
+        ?: env("AIOPLAY_ARM64_ONLY")
+)
 val useDebugReleaseSigning = env("CI_USE_DEBUG_SIGNING").equals("true", ignoreCase = true)
 val useLocalFfmpegDecoder = truthy(
     providers.gradleProperty("useLocalFfmpegDecoder").orNull
@@ -320,10 +324,16 @@ android {
         abi {
             isEnable = !buildingAppBundle
             reset()
-            include("armeabi-v7a", "arm64-v8a")
-            // Publish one device-agnostic APK alongside the optimized ABI APKs.
-            // The release workflow attaches all of them to the same release.
-            isUniversalApk = true
+            if (aioplayArm64Only) {
+                // Dedicated AIOPlay sideload build for Google TV Streamer 4K.
+                // Keep only 64-bit ARM native libraries to minimise APK size.
+                include("arm64-v8a")
+                isUniversalApk = false
+            } else {
+                include("armeabi-v7a", "arm64-v8a")
+                // Normal project builds keep the existing device-agnostic APK.
+                isUniversalApk = true
+            }
         }
     }
 

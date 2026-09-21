@@ -722,7 +722,7 @@ private fun AioPlaySectionCard(
     val shape = RoundedCornerShape(12.dp)
     Card(
         onClick = onClick,
-        modifier = modifier.width(132.dp),
+        modifier = modifier.width(if (text == "Continue Watching") 180.dp else 132.dp),
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
             containerColor = if (selected) {

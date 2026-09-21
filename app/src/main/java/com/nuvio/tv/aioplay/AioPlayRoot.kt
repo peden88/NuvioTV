@@ -281,11 +281,12 @@ private fun AioPlaySignedInApp(
                             }
                             navController.navigate(loadingRoute(item, contentType))
                         }
-                        AioPlaySection.MOVIES -> {
-                            navController.navigate(loadingRoute(item, "movie"))
-                        }
-                        AioPlaySection.SERIES -> {
-                            navController.navigate(seriesRoute(item))
+                        AioPlaySection.VOD -> {
+                            if (item.type.equals("series", ignoreCase = true)) {
+                                navController.navigate(seriesRoute(item))
+                            } else {
+                                navController.navigate(loadingRoute(item, "movie"))
+                            }
                         }
                     }
                 },
@@ -528,15 +529,9 @@ private fun AioPlayHomeScreen(
                 if (state.capabilities?.vodEnabled == true) {
                     Spacer(modifier = Modifier.width(10.dp))
                     AioPlaySectionCard(
-                        text = "Series",
-                        selected = state.selectedSection == AioPlaySection.SERIES,
-                        onClick = { onSection(AioPlaySection.SERIES) }
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    AioPlaySectionCard(
-                        text = "Movies",
-                        selected = state.selectedSection == AioPlaySection.MOVIES,
-                        onClick = { onSection(AioPlaySection.MOVIES) }
+                        text = "VOD",
+                        selected = state.selectedSection == AioPlaySection.VOD,
+                        onClick = { onSection(AioPlaySection.VOD) }
                     )
                 }
             }
@@ -587,15 +582,24 @@ private fun AioPlayHomeScreen(
                     }
                 }
                 else -> {
-                    val posterMode = state.selectedSection != AioPlaySection.LIVE
+                    val posterMode = state.selectedSection == AioPlaySection.VOD
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(
-                            minSize = if (posterMode) 190.dp else 245.dp
-                        ),
+                        columns = if (posterMode) {
+                            GridCells.Fixed(5)
+                        } else {
+                            GridCells.Adaptive(minSize = 245.dp)
+                        },
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 30.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(18.dp)
+                        contentPadding = PaddingValues(
+                            top = if (posterMode) 8.dp else 0.dp,
+                            bottom = if (posterMode) 24.dp else 30.dp
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(
+                            if (posterMode) 12.dp else 16.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(
+                            if (posterMode) 8.dp else 18.dp
+                        )
                     ) {
                         gridItems(state.items, key = { it.id }) { item ->
                             AioPlayContentCard(
@@ -706,6 +710,10 @@ private fun AioPlayContentCard(
     Card(
         onClick = onClick,
         modifier = Modifier
+            .padding(
+                horizontal = if (posterMode) 3.dp else 0.dp,
+                vertical = if (posterMode) 5.dp else 0.dp
+            )
             .fillMaxWidth()
             .aspectRatio(if (posterMode) 2f / 3f else 16f / 9f),
         shape = CardDefaults.shape(shape = shape),
@@ -719,7 +727,7 @@ private fun AioPlayContentCard(
                 shape = shape
             )
         ),
-        scale = CardDefaults.scale(focusedScale = 1.035f)
+        scale = CardDefaults.scale(focusedScale = if (posterMode) 1.02f else 1.035f)
     ) {
         Box(
             modifier = Modifier

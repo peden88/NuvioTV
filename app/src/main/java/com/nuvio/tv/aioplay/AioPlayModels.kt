@@ -21,7 +21,8 @@ data class AioPlayCapabilities(
 data class AioPlayCatalog(
     val id: String,
     val name: String,
-    val type: String
+    val type: String,
+    val requiredExtras: List<String> = emptyList()
 )
 
 data class AioPlayItem(
@@ -43,4 +44,17 @@ data class AioPlayPlaybackTarget(
 data class AioPlayPlayback(
     val sessionId: String,
     val target: AioPlayPlaybackTarget
+)
+
+
+data class AioPlayVideo(
+    val id: String,
+    val title: String,
+    val season: Int?,
+    val episode: Int?
+)
+
+data class AioPlayMetaDetails(
+    val item: AioPlayItem,
+    val videos: List<AioPlayVideo>
 )

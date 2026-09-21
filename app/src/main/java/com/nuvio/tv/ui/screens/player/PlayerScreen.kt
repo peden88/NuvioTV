@@ -929,7 +929,7 @@ fun PlayerScreen(
                     .joinToString(" \u00b7 ")
                     .takeIf { it.isNotBlank() }
             },
-            filename = viewModel.currentFilename,
+            filename = if (BuildConfig.AIOPLAY_MODE) null else viewModel.currentFilename,
             progress = uiState.loadingProgress,
             modifier = Modifier
                 .fillMaxSize()

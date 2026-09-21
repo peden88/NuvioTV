@@ -154,28 +154,114 @@ class AioPlayApiClient @Inject constructor(
     }
 
     suspend fun catalog(token: String, catalog: AioPlayCatalog): List<AioPlayItem> {
-        val id = URLEncoder.encode(catalog.id, "UTF-8").replace("+", "%20")
+        val id = encodePath(catalog.id)
         val json = requestJson("/api/v1/sports/catalog/$id", token = token)
-        val array = json.optJSONArray("metas") ?: return emptyList()
+        return parseItems(json, catalog.type)
+    }
+
+    suspend fun vodCatalogs(token: String): List<AioPlayCatalog> {
+        val json = requestJson("/api/v1/vod/catalogs", token = token)
+        val array = json.optJSONArray("catalogs") ?: return emptyList()
         return buildList {
             for (i in 0 until array.length()) {
                 val row = array.optJSONObject(i) ?: continue
-                val itemId = row.optString("id")
-                val name = row.optString("name")
-                if (itemId.isBlank() || name.isBlank()) continue
+                val id = row.optString("id")
+                val name = row.optString("name").ifBlank { id }
+                val type = row.optString("type")
+                if (id.isBlank() || type !in setOf("movie", "series")) continue
+
+                val extras = buildList {
+                    val required = row.optJSONArray("requiredExtras")
+                    if (required != null) {
+                        for (j in 0 until required.length()) {
+                            required.optString(j).takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                    }
+                }
                 add(
-                    AioPlayItem(
-                        id = itemId,
-                        type = row.optString("type").ifBlank { catalog.type },
+                    AioPlayCatalog(
+                        id = id,
                         name = name,
-                        description = row.optString("description").takeIf { it.isNotBlank() },
-                        poster = row.optString("poster").takeIf { it.isNotBlank() },
-                        background = row.optString("background").takeIf { it.isNotBlank() },
-                        logo = row.optString("logo").takeIf { it.isNotBlank() }
+                        type = type,
+                        requiredExtras = extras
                     )
                 )
             }
         }
+    }
+
+    suspend fun vodCatalog(token: String, catalog: AioPlayCatalog): List<AioPlayItem> {
+        val type = requireVodType(catalog.type)
+        val json = requestJson(
+            "/api/v1/vod/catalog/" + encodePath(type) + "/" + encodePath(catalog.id),
+            token = token
+        )
+        return parseItems(json, type)
+    }
+
+    suspend fun searchVod(
+        token: String,
+        query: String,
+        type: String? = null
+    ): List<AioPlayItem> {
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) return emptyList()
+        val suffix = buildString {
+            append("?q=")
+            append(URLEncoder.encode(cleanQuery, "UTF-8"))
+            if (!type.isNullOrBlank()) {
+                append("&type=")
+                append(URLEncoder.encode(requireVodType(type), "UTF-8"))
+            }
+        }
+        val json = requestJson("/api/v1/vod/search$suffix", token = token)
+        return parseItems(json, type.orEmpty())
+    }
+
+    suspend fun vodMeta(
+        token: String,
+        type: String,
+        id: String
+    ): AioPlayMetaDetails {
+        val safeType = requireVodType(type)
+        val json = requestJson(
+            "/api/v1/vod/meta/" + encodePath(safeType) + "/" + encodePath(id),
+            token = token
+        )
+        val meta = json.optJSONObject("meta")
+            ?: throw AioPlayApiException("The server returned no metadata.")
+        val item = parseItem(meta, safeType)
+            ?: throw AioPlayApiException("The server returned incomplete metadata.")
+
+        val videos = buildList {
+            val rows = meta.optJSONArray("videos")
+            if (rows != null) {
+                for (i in 0 until rows.length()) {
+                    val video = rows.optJSONObject(i) ?: continue
+                    val videoId = video.optString("id")
+                    if (videoId.isBlank()) continue
+                    val season = video.optInt("season").takeIf { video.has("season") }
+                    val episode = video.optInt("episode").takeIf { video.has("episode") }
+                    val title = video.optString("title")
+                        .ifBlank { video.optString("name") }
+                        .ifBlank {
+                            if (episode != null && episode > 0) "Episode $episode" else "Episode"
+                        }
+                    add(
+                        AioPlayVideo(
+                            id = videoId,
+                            title = title,
+                            season = season,
+                            episode = episode
+                        )
+                    )
+                }
+            }
+        }.sortedWith(
+            compareBy<AioPlayVideo> { it.season ?: 0 }
+                .thenBy { it.episode ?: 0 }
+        )
+        return AioPlayMetaDetails(item = item, videos = videos)
     }
 
     suspend fun startPlayback(
@@ -209,6 +295,44 @@ class AioPlayApiClient @Inject constructor(
             method = "DELETE",
             token = token,
             allowEmpty = true
+        )
+    }
+
+    private fun encodePath(value: String): String =
+        URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
+    private fun requireVodType(type: String): String {
+        val value = type.trim().lowercase()
+        if (value != "movie" && value != "series") {
+            throw AioPlayApiException("VOD type must be movie or series.")
+        }
+        return value
+    }
+
+    private fun parseItems(json: JSONObject, fallbackType: String): List<AioPlayItem> {
+        val array = json.optJSONArray("metas")
+            ?: json.optJSONArray("metasDetailed")
+            ?: return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                parseItem(array.optJSONObject(i), fallbackType)?.let(::add)
+            }
+        }
+    }
+
+    private fun parseItem(json: JSONObject?, fallbackType: String): AioPlayItem? {
+        if (json == null) return null
+        val id = json.optString("id")
+        val name = json.optString("name").ifBlank { json.optString("title") }
+        if (id.isBlank() || name.isBlank()) return null
+        return AioPlayItem(
+            id = id,
+            type = json.optString("type").ifBlank { fallbackType },
+            name = name,
+            description = json.optString("description").takeIf { it.isNotBlank() },
+            poster = json.optString("poster").takeIf { it.isNotBlank() },
+            background = json.optString("background").takeIf { it.isNotBlank() },
+            logo = json.optString("logo").takeIf { it.isNotBlank() }
         )
     }
 

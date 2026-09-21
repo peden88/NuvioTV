@@ -909,7 +909,7 @@ fun PlayerScreen(
                 uiState.error == null && !postPlayRecommendationState.isVisible,
             backdropUrl = uiState.backdrop,
             logoUrl = uiState.logo,
-            title = uiState.title,
+            title = if (BuildConfig.AIOPLAY_MODE) null else uiState.title,
             message = if (seekrCalibrationActive) {
                 stringResource(R.string.player_loading_preview_sync)
             } else {

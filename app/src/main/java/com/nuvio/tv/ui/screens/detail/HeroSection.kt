@@ -100,6 +100,8 @@ fun HeroContentSection(
     isMovieWatched: Boolean,
     isMovieWatchedPending: Boolean,
     onToggleMovieWatched: () -> Unit,
+    showLibraryAction: Boolean = true,
+    showWatchedAction: Boolean = true,
     onRandomClick: (() -> Unit)? = null,
     trailerAvailable: Boolean = false,
     onTrailerClick: () -> Unit = {},
@@ -254,20 +256,22 @@ fun HeroContentSection(
                             }
                         )
 
-                        ActionIconButton(
-                            icon = if (isInLibrary) Icons.Default.Check else null,
-                            painter = if (!isInLibrary) {
-                                libraryAddPainter
-                            } else {
-                                null
-                            },
-                            contentDescription = if (isInLibrary) stringResource(R.string.hero_remove_from_library) else stringResource(R.string.hero_add_to_library),
-                            onClick = onToggleLibrary,
-                            onLongPress = onLibraryLongPress,
-                            onFocused = onHeroActionFocused
-                        )
+                        if (showLibraryAction) {
+                            ActionIconButton(
+                                icon = if (isInLibrary) Icons.Default.Check else null,
+                                painter = if (!isInLibrary) {
+                                    libraryAddPainter
+                                } else {
+                                    null
+                                },
+                                contentDescription = if (isInLibrary) stringResource(R.string.hero_remove_from_library) else stringResource(R.string.hero_add_to_library),
+                                onClick = onToggleLibrary,
+                                onLongPress = onLibraryLongPress,
+                                onFocused = onHeroActionFocused
+                            )
+                        }
 
-                        if (meta.apiType == "movie") {
+                        if (showWatchedAction && meta.apiType == "movie") {
                             ActionIconButton(
                                 icon = if (isMovieWatched) {
                                     Icons.Default.Visibility

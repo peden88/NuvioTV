@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: aioplay-tv-${{ github.ref }}
@@ -53,3 +53,22 @@ jobs:
           path: app/build/outputs/apk/aioplay/debug/*.apk
           if-no-files-found: error
           retention-days: 7
+
+      - name: Publish stable Downloader APK
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK_PATH="$(find app/build/outputs/apk/aioplay/debug -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          test -n "$APK_PATH"
+          cp "$APK_PATH" AIOPlay-TV.apk
+
+          if ! gh release view aioplay-tv-latest >/dev/null 2>&1; then
+            gh release create aioplay-tv-latest \
+              --title "AIOPlay TV Latest" \
+              --notes "Rolling AIOPlay TV debug build. The AIOPlay-TV.apk asset is replaced after each successful build from feature/aioplay-tv." \
+              --target "$GITHUB_SHA" \
+              --prerelease
+          fi
+
+          gh release upload aioplay-tv-latest AIOPlay-TV.apk --clobber

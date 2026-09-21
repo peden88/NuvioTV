@@ -105,7 +105,6 @@ private fun loadingRoute(
         "&poster=" + encode(item.poster) +
         "&backdrop=" + encode(item.background) +
         "&logo=" + encode(item.logo) +
-        "&logo=" + encode(item.logo) +
         "&contentType=" + encode(contentType) +
         "&sessionId=" + encode(sessionId)
 
@@ -114,7 +113,8 @@ private fun seriesRoute(item: AioPlayItem): String =
         "?itemId=" + encode(item.id) +
         "&title=" + encode(item.name) +
         "&poster=" + encode(item.poster) +
-        "&backdrop=" + encode(item.background)
+        "&backdrop=" + encode(item.background) +
+        "&logo=" + encode(item.logo)
 
 private fun playerRoute(
     item: AioPlayItem,

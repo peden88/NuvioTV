@@ -13,8 +13,7 @@ import kotlinx.coroutines.launch
 
 enum class AioPlaySection(val label: String) {
     LIVE("Live"),
-    SERIES("Series"),
-    MOVIES("Movies")
+    VOD("VOD")
 }
 
 data class AioPlayUiState(
@@ -41,8 +40,7 @@ class AioPlayViewModel @Inject constructor(
 
     private var token: String? = null
     private var liveCatalogs: List<AioPlayCatalog> = emptyList()
-    private var movieCatalogs: List<AioPlayCatalog> = emptyList()
-    private var seriesCatalogs: List<AioPlayCatalog> = emptyList()
+    private var vodCatalogs: List<AioPlayCatalog> = emptyList()
 
     init {
         viewModelScope.launch { restoreSession() }
@@ -111,23 +109,15 @@ class AioPlayViewModel @Inject constructor(
             emptyList()
         }
 
-        val vodCatalogs = if (capabilities.vodEnabled) {
+        vodCatalogs = if (capabilities.vodEnabled) {
             runCatching { api.vodCatalogs(activeToken) }.getOrDefault(emptyList())
         } else {
             emptyList()
         }
 
-        movieCatalogs = vodCatalogs.filter {
-            it.type.equals("movie", ignoreCase = true)
-        }
-        seriesCatalogs = vodCatalogs.filter {
-            it.type.equals("series", ignoreCase = true)
-        }
-
         val initialSection = when {
             liveCatalogs.isNotEmpty() -> AioPlaySection.LIVE
-            seriesCatalogs.isNotEmpty() -> AioPlaySection.SERIES
-            movieCatalogs.isNotEmpty() -> AioPlaySection.MOVIES
+            vodCatalogs.isNotEmpty() -> AioPlaySection.VOD
             else -> AioPlaySection.LIVE
         }
         val initialCatalogs = catalogsFor(initialSection)
@@ -156,8 +146,7 @@ class AioPlayViewModel @Inject constructor(
 
     private fun catalogsFor(section: AioPlaySection): List<AioPlayCatalog> = when (section) {
         AioPlaySection.LIVE -> liveCatalogs
-        AioPlaySection.SERIES -> seriesCatalogs
-        AioPlaySection.MOVIES -> movieCatalogs
+        AioPlaySection.VOD -> vodCatalogs
     }
 
     fun selectSection(section: AioPlaySection) {
@@ -246,8 +235,7 @@ class AioPlayViewModel @Inject constructor(
             val oldToken = token
             token = null
             liveCatalogs = emptyList()
-            movieCatalogs = emptyList()
-            seriesCatalogs = emptyList()
+            vodCatalogs = emptyList()
             if (!oldToken.isNullOrBlank()) {
                 runCatching { api.logout(oldToken) }
             }

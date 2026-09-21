@@ -22,8 +22,22 @@ data class AioPlayCatalog(
     val id: String,
     val name: String,
     val type: String,
-    val requiredExtras: List<String> = emptyList()
-)
+    val requiredExtras: List<String> = emptyList(),
+    val extras: Map<String, String> = emptyMap()
+) {
+    val selectionKey: String
+        get() = buildString {
+            append(type)
+            append(':')
+            append(id)
+            extras.toSortedMap().forEach { (key, value) ->
+                append('|')
+                append(key)
+                append('=')
+                append(value)
+            }
+        }
+}
 
 data class AioPlayItem(
     val id: String,

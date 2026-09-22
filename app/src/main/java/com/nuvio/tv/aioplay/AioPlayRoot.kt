@@ -22,10 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -38,7 +34,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +43,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -83,9 +79,9 @@ import com.nuvio.tv.ui.screens.account.InputField
 import com.nuvio.tv.ui.screens.player.PlayerScreen
 import com.nuvio.tv.ui.screens.settings.PlaybackSettingsScreen
 import com.nuvio.tv.ui.theme.NuvioTheme
+import android.view.KeyEvent as AndroidKeyEvent
 import java.net.URLEncoder
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 private const val HOME_ROUTE = "aioplay_home"
@@ -597,6 +593,28 @@ private fun AioPlayHomeScreen(
     val vodFocus = remember { FocusRequester() }
     val continueFocus = remember { FocusRequester() }
     val firstContentFocus = remember(state.selectedSection, state.items.firstOrNull()?.id) { FocusRequester() }
+    val contentFocusRequesters = remember(
+        state.selectedSection,
+        state.selectedCatalogId,
+        state.items.map { it.id },
+        firstContentFocus
+    ) {
+        state.items.associate { item ->
+            item.id to if (item.id == state.items.firstOrNull()?.id) {
+                firstContentFocus
+            } else {
+                FocusRequester()
+            }
+        }
+    }
+    var contentWindowStartRow by remember(
+        state.selectedSection,
+        state.selectedCatalogId
+    ) { mutableIntStateOf(0) }
+    var pendingContentFocusId by remember(
+        state.selectedSection,
+        state.selectedCatalogId
+    ) { mutableStateOf<String?>(null) }
     var pendingSectionFocus by remember { mutableStateOf<AioPlaySection?>(null) }
     val navFocusRequesters = remember(state.catalogs.map { it.selectionKey }) {
         state.catalogs.associate { it.selectionKey to FocusRequester() }
@@ -845,11 +863,15 @@ private fun AioPlayHomeScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            val contentGridState = rememberLazyGridState()
-            val contentGridScope = rememberCoroutineScope()
-
             LaunchedEffect(state.selectedSection, state.selectedCatalogId) {
-                contentGridState.scrollToItem(0)
+                contentWindowStartRow = 0
+                pendingContentFocusId = null
+            }
+
+            LaunchedEffect(contentWindowStartRow, pendingContentFocusId) {
+                val focusId = pendingContentFocusId ?: return@LaunchedEffect
+                runCatching { contentFocusRequesters[focusId]?.requestFocus() }
+                pendingContentFocusId = null
             }
 
             when {
@@ -875,67 +897,108 @@ private fun AioPlayHomeScreen(
                 else -> {
                     val posterMode = state.selectedSection != AioPlaySection.LIVE
                     val columnCount = if (posterMode) 6 else 3
-                    val pageSize = columnCount * 2
+                    val totalRows = (state.items.size + columnCount - 1) / columnCount
+                    val maxWindowStart = (totalRows - 2).coerceAtLeast(0)
+                    if (contentWindowStartRow > maxWindowStart) {
+                        contentWindowStartRow = maxWindowStart
+                    }
 
                     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                         val rowSpacing = if (posterMode) 6.dp else 8.dp
+                        val columnSpacing = if (posterMode) 9.dp else 10.dp
                         val rowHeight = (maxHeight - rowSpacing) / 2
 
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(columnCount),
-                            state = contentGridState,
+                        Column(
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(0.dp),
-                            horizontalArrangement = Arrangement.spacedBy(
-                                if (posterMode) 9.dp else 10.dp
-                            ),
                             verticalArrangement = Arrangement.spacedBy(rowSpacing)
                         ) {
-                            gridItemsIndexed(
-                                items = state.items,
-                                key = { _, item -> item.id }
-                            ) { index, item ->
-                                Box(
+                            repeat(2) { visibleRow ->
+                                val absoluteRow = contentWindowStartRow + visibleRow
+
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(rowHeight),
-                                    contentAlignment = Alignment.Center
+                                    horizontalArrangement = Arrangement.spacedBy(columnSpacing),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    AioPlayContentCard(
-                                        item = item,
-                                        posterMode = posterMode,
-                                        liveCardHeight = if (posterMode) null else rowHeight - 8.dp,
-                                        onClick = { onItem(item) },
-                                        modifier = Modifier
-                                            .then(
-                                                if (item.id == state.items.firstOrNull()?.id) {
-                                                    Modifier.focusRequester(firstContentFocus)
-                                                } else {
-                                                    Modifier
-                                                }
-                                            )
-                                            .onFocusChanged {
-                                                if (it.isFocused) {
-                                                    focusZone = AioPlayHomeFocusZone.CONTENT
-                                                    val pageStart = (index / pageSize) * pageSize
-                                                    // Keep the TV grid locked to exact two-row pages.
-                                                    // Never animate here: focus changes also fire while
-                                                    // moving left/right, and an animated correction makes
-                                                    // the whole grid visibly bob up and down.
-                                                    if (
-                                                        contentGridState.firstVisibleItemIndex != pageStart ||
-                                                        contentGridState.firstVisibleItemScrollOffset != 0
-                                                    ) {
-                                                        contentGridScope.launch {
-                                                            contentGridState.scrollToItem(
-                                                                index = pageStart,
-                                                                scrollOffset = 0
+                                    repeat(columnCount) { column ->
+                                        val itemIndex = absoluteRow * columnCount + column
+                                        val item = state.items.getOrNull(itemIndex)
+
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (item != null) {
+                                                val requester = contentFocusRequesters[item.id]
+                                                AioPlayContentCard(
+                                                    item = item,
+                                                    posterMode = posterMode,
+                                                    liveCardHeight = if (posterMode) null else rowHeight - 8.dp,
+                                                    onClick = { onItem(item) },
+                                                    modifier = Modifier
+                                                        .then(
+                                                            if (requester != null) {
+                                                                Modifier.focusRequester(requester)
+                                                            } else {
+                                                                Modifier
+                                                            }
+                                                        )
+                                                        .onPreviewKeyEvent { event ->
+                                                            val native = event.nativeKeyEvent
+                                                            if (native.action != AndroidKeyEvent.ACTION_DOWN) {
+                                                                return@onPreviewKeyEvent false
+                                                            }
+
+                                                            val direction = when (native.keyCode) {
+                                                                AndroidKeyEvent.KEYCODE_DPAD_DOWN -> 1
+                                                                AndroidKeyEvent.KEYCODE_DPAD_UP -> -1
+                                                                else -> 0
+                                                            }
+                                                            if (direction == 0) {
+                                                                return@onPreviewKeyEvent false
+                                                            }
+
+                                                            val targetRow = absoluteRow + direction
+                                                            if (targetRow < 0 || targetRow >= totalRows) {
+                                                                return@onPreviewKeyEvent false
+                                                            }
+
+                                                            val targetRowStart = targetRow * columnCount
+                                                            val targetIndex = minOf(
+                                                                targetRowStart + column,
+                                                                state.items.lastIndex
                                                             )
+                                                            if (targetIndex < targetRowStart) {
+                                                                return@onPreviewKeyEvent false
+                                                            }
+
+                                                            val targetItem = state.items[targetIndex]
+                                                            val nextWindowStart = when {
+                                                                targetRow < contentWindowStartRow ->
+                                                                    targetRow
+                                                                targetRow > contentWindowStartRow + 1 ->
+                                                                    targetRow - 1
+                                                                else ->
+                                                                    contentWindowStartRow
+                                                            }.coerceIn(0, maxWindowStart)
+
+                                                            pendingContentFocusId = targetItem.id
+                                                            contentWindowStartRow = nextWindowStart
+                                                            true
                                                         }
-                                                    }
-                                                }
+                                                        .onFocusChanged {
+                                                            if (it.isFocused) {
+                                                                focusZone = AioPlayHomeFocusZone.CONTENT
+                                                            }
+                                                        }
+                                                )
                                             }
-                                    )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -947,6 +1010,7 @@ private fun AioPlayHomeScreen(
 }
 
 @Composable
+private fun AioPlaySectionCard@Composable
 private fun AioPlaySectionCard(
     text: String,
     selected: Boolean,

@@ -51,6 +51,7 @@ class AioPlayViewModel @Inject constructor(
     private var vodCatalogs: List<AioPlayCatalog> = emptyList()
     private var continueWatchingItems: List<AioPlayItem> = emptyList()
     private var localProgressByKey: Map<String, WatchProgress> = emptyMap()
+    private val sharedProgressByKey = mutableMapOf<String, WatchProgress>()
     private val pushedProgressFingerprints = mutableMapOf<String, String>()
 
     private val continueWatchingCatalog = AioPlayCatalog(
@@ -65,49 +66,15 @@ class AioPlayViewModel @Inject constructor(
             restoreSession()
         }
         viewModelScope.launch {
-            watchProgressRepository.continueWatching.collectLatest { rows ->
-                continueWatchingItems = rows.map { progress ->
-                    val isSeries =
-                        progress.contentType.equals("series", ignoreCase = true) ||
-                            progress.contentType.equals("tv", ignoreCase = true) ||
-                            progress.contentType.equals("episode", ignoreCase = true)
-                    val episodeLabel = if (
-                        isSeries && progress.season != null && progress.episode != null
-                    ) {
-                        "S" + progress.season.toString().padStart(2, '0') +
-                            "E" + progress.episode.toString().padStart(2, '0') +
-                            progress.episodeTitle?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
-                    } else {
-                        null
-                    }
-                    AioPlayItem(
-                        id = if (isSeries) progress.videoId else progress.contentId,
-                        type = if (isSeries) "episode" else "movie",
-                        name = progress.name,
-                        description = episodeLabel,
-                        poster = progress.poster,
-                        background = progress.backdrop,
-                        logo = progress.logo,
-                        parentId = if (isSeries) progress.contentId else null,
-                        parentName = if (isSeries) progress.name else null,
-                        season = progress.season,
-                        episode = progress.episode,
-                        episodeTitle = progress.episodeTitle
-                    )
-                }
-
-                if (_state.value.selectedSection == AioPlaySection.CONTINUE) {
-                    _state.value = _state.value.copy(
-                        items = continueWatchingItems,
-                        loadingCatalog = false,
-                        error = null
-                    )
-                }
+            watchProgressRepository.continueWatching.collectLatest {
+                rebuildContinueWatching()
             }
         }
         viewModelScope.launch {
             watchProgressRepository.allProgress.collect { rows ->
                 localProgressByKey = rows.associateBy(::progressKey)
+                rows.forEach(::mergeSharedProgress)
+                rebuildContinueWatching()
                 val activeToken = token ?: return@collect
                 val changed = rows
                     .sortedByDescending { it.lastWatched }
@@ -127,21 +94,114 @@ class AioPlayViewModel @Inject constructor(
         }
     }
 
+    private fun isSeriesProgress(progress: WatchProgress): Boolean =
+        progress.contentType.equals("series", ignoreCase = true) ||
+            progress.contentType.equals("tv", ignoreCase = true) ||
+            progress.contentType.equals("episode", ignoreCase = true)
+
     private fun progressKey(progress: WatchProgress): String = buildString {
-        val isSeries =
-            progress.contentType.equals("series", ignoreCase = true) ||
-                progress.contentType.equals("tv", ignoreCase = true) ||
-                progress.contentType.equals("episode", ignoreCase = true)
+        val isSeries = isSeriesProgress(progress)
         append(if (isSeries) "series" else "movie")
         append('|')
         append(progress.contentId)
         if (isSeries) {
             append('|')
-            append(progress.season ?: "")
-            append('|')
-            append(progress.episode ?: "")
-            append('|')
-            append(progress.videoId)
+            if (progress.season != null && progress.episode != null) {
+                append(progress.season)
+                append('|')
+                append(progress.episode)
+            } else {
+                append("video|")
+                append(progress.videoId)
+            }
+        }
+    }
+
+    private fun mergeSharedProgress(progress: WatchProgress) {
+        val key = progressKey(progress)
+        val current = sharedProgressByKey[key]
+        if (current == null || progress.lastWatched >= current.lastWatched) {
+            sharedProgressByKey[key] = progress
+        }
+    }
+
+    private fun rebuildContinueWatching() {
+        continueWatchingItems = sharedProgressByKey.values
+            .asSequence()
+            .filter(WatchProgress::isInProgress)
+            .sortedByDescending(WatchProgress::lastWatched)
+            .map { progress ->
+                val isSeries = isSeriesProgress(progress)
+                val episodeLabel = if (
+                    isSeries && progress.season != null && progress.episode != null
+                ) {
+                    "S" + progress.season.toString().padStart(2, '0') +
+                        "E" + progress.episode.toString().padStart(2, '0') +
+                        progress.episodeTitle
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { " · $it" }
+                            .orEmpty()
+                } else {
+                    null
+                }
+                AioPlayItem(
+                    id = if (isSeries) progress.videoId else progress.contentId,
+                    type = if (isSeries) "episode" else "movie",
+                    name = progress.name,
+                    description = episodeLabel,
+                    poster = progress.poster,
+                    background = progress.backdrop,
+                    logo = progress.logo,
+                    parentId = if (isSeries) progress.contentId else null,
+                    parentName = if (isSeries) progress.name else null,
+                    season = progress.season,
+                    episode = progress.episode,
+                    episodeTitle = progress.episodeTitle,
+                    resumePositionMs = progress.position.takeIf { it > 0L },
+                    resumeDurationMs = progress.duration.takeIf { it > 0L }
+                )
+            }
+            .toList()
+
+        if (_state.value.selectedSection == AioPlaySection.CONTINUE) {
+            _state.value = _state.value.copy(
+                items = continueWatchingItems,
+                loadingCatalog = false,
+                error = null
+            )
+        }
+    }
+
+    fun withSharedResume(item: AioPlayItem, contentType: String): AioPlayItem {
+        val type = contentType.lowercase()
+        if (type != "movie" && type != "episode") return item
+
+        val progress = if (type == "movie") {
+            sharedProgressByKey.values
+                .filter { !isSeriesProgress(it) && it.contentId == item.id }
+                .maxByOrNull(WatchProgress::lastWatched)
+        } else {
+            val parentId = item.parentId
+            sharedProgressByKey.values
+                .filter { candidate ->
+                    isSeriesProgress(candidate) &&
+                        (parentId == null || candidate.contentId == parentId) &&
+                        when {
+                            item.season != null && item.episode != null ->
+                                candidate.season == item.season && candidate.episode == item.episode
+                            else -> candidate.videoId == item.id
+                        }
+                }
+                .maxByOrNull(WatchProgress::lastWatched)
+        }
+
+        return if (progress?.isInProgress() == true) {
+            item.copy(
+                resumePositionMs = progress.position.takeIf { it > 0L },
+                resumeDurationMs = progress.duration.takeIf { it > 0L }
+            )
+        } else {
+            item
         }
     }
 
@@ -164,16 +224,20 @@ class AioPlayViewModel @Inject constructor(
         }
 
         remote.forEach { incoming ->
+            mergeSharedProgress(incoming)
             val current = local[progressKey(incoming)]
             if (current == null || incoming.lastWatched > current.lastWatched) {
                 watchProgressRepository.saveProgress(incoming, syncRemote = false)
             }
         }
+        rebuildContinueWatching()
     }
 
     private suspend fun syncSharedProgress(activeToken: String) {
         val local = watchProgressRepository.allProgress.first()
         localProgressByKey = local.associateBy(::progressKey)
+        local.forEach(::mergeSharedProgress)
+        rebuildContinueWatching()
 
         runCatching { pullSharedProgress(activeToken) }
 
@@ -413,6 +477,7 @@ class AioPlayViewModel @Inject constructor(
             vodCatalogs = emptyList()
             continueWatchingItems = emptyList()
             localProgressByKey = emptyMap()
+            sharedProgressByKey.clear()
             pushedProgressFingerprints.clear()
             if (!oldToken.isNullOrBlank()) {
                 runCatching { api.logout(oldToken) }

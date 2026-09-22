@@ -918,8 +918,15 @@ private fun AioPlayHomeScreen(
                                                 if (it.isFocused) {
                                                     focusZone = AioPlayHomeFocusZone.CONTENT
                                                     val pageStart = (index / pageSize) * pageSize
+                                                    // Keep the TV grid locked to exact two-row pages.
+                                                    // Never animate here: focus changes also fire while
+                                                    // moving left/right, and an animated correction makes
+                                                    // the whole grid visibly bob up and down.
                                                     contentGridScope.launch {
-                                                        contentGridState.animateScrollToItem(pageStart)
+                                                        contentGridState.scrollToItem(
+                                                            index = pageStart,
+                                                            scrollOffset = 0
+                                                        )
                                                     }
                                                 }
                                             }

@@ -120,7 +120,12 @@ private fun AioPlayRichDetails(
                 description = video.overview,
                 poster = meta.poster,
                 background = meta.background,
-                logo = meta.logo
+                logo = meta.logo,
+                parentId = meta.id,
+                parentName = meta.name,
+                season = video.season,
+                episode = video.episode,
+                episodeTitle = video.title
             ),
             "episode"
         )

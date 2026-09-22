@@ -138,7 +138,11 @@ private fun AioPlayRichDetails(
             .fillMaxSize()
             .background(AioPlayBackgroundGradient)
     ) {
-        val backdrop = meta.background ?: meta.landscapePoster ?: meta.poster
+        val backdrop = meta.background
+            ?: meta.landscapePoster
+            ?: details.item.background
+            ?: meta.poster
+            ?: details.item.poster
         if (!backdrop.isNullOrBlank()) {
             AsyncImage(
                 model = backdrop,

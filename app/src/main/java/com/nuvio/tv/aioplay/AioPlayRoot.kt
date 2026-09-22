@@ -922,11 +922,16 @@ private fun AioPlayHomeScreen(
                                                     // Never animate here: focus changes also fire while
                                                     // moving left/right, and an animated correction makes
                                                     // the whole grid visibly bob up and down.
-                                                    contentGridScope.launch {
-                                                        contentGridState.scrollToItem(
-                                                            index = pageStart,
-                                                            scrollOffset = 0
-                                                        )
+                                                    if (
+                                                        contentGridState.firstVisibleItemIndex != pageStart ||
+                                                        contentGridState.firstVisibleItemScrollOffset != 0
+                                                    ) {
+                                                        contentGridScope.launch {
+                                                            contentGridState.scrollToItem(
+                                                                index = pageStart,
+                                                                scrollOffset = 0
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }

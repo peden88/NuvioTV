@@ -44,7 +44,11 @@ internal fun AioPlayDetailsScreen(
     preview: AioPlayItem,
     viewModel: AioPlayViewModel,
     onPlay: (AioPlayItem, String) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    restoreEpisodeId: String? = null,
+    restoreEpisodeSeason: Int? = null,
+    restoreEpisodeFocusToken: Int = 0,
+    restoreHeroFocusToken: Int = 0
 ) {
     BackHandler(onBack = onBack)
 
@@ -83,7 +87,11 @@ internal fun AioPlayDetailsScreen(
         )
         details != null -> AioPlayRichDetails(
             details = details!!,
-            onPlay = onPlay
+            onPlay = onPlay,
+            restoreEpisodeId = restoreEpisodeId,
+            restoreEpisodeSeason = restoreEpisodeSeason,
+            restoreEpisodeFocusToken = restoreEpisodeFocusToken,
+            restoreHeroFocusToken = restoreHeroFocusToken
         )
     }
 }
@@ -91,7 +99,11 @@ internal fun AioPlayDetailsScreen(
 @Composable
 private fun AioPlayRichDetails(
     details: AioPlayMetaDetails,
-    onPlay: (AioPlayItem, String) -> Unit
+    onPlay: (AioPlayItem, String) -> Unit,
+    restoreEpisodeId: String?,
+    restoreEpisodeSeason: Int?,
+    restoreEpisodeFocusToken: Int,
+    restoreHeroFocusToken: Int
 ) {
     val meta = details.meta
     val isSeries = meta.apiType.equals("series", ignoreCase = true) ||
@@ -101,7 +113,9 @@ private fun AioPlayRichDetails(
     }
     var selectedSeason by remember(meta.id, seasons) {
         mutableIntStateOf(
-            seasons.firstOrNull { it > 0 }
+            restoreEpisodeSeason
+                ?.takeIf { it in seasons }
+                ?: seasons.firstOrNull { it > 0 }
                 ?: seasons.firstOrNull()
                 ?: 1
         )
@@ -112,6 +126,20 @@ private fun AioPlayRichDetails(
     }
     val heroFocus = remember(meta.id) { FocusRequester() }
     val seasonFocus = remember(meta.id) { FocusRequester() }
+    val episodeFocusRequesters = remember(meta.id) { mutableMapOf<String, FocusRequester>() }
+
+    LaunchedEffect(restoreEpisodeFocusToken, restoreEpisodeSeason, seasons) {
+        if (restoreEpisodeFocusToken <= 0) return@LaunchedEffect
+        restoreEpisodeSeason
+            ?.takeIf { it in seasons }
+            ?.let { selectedSeason = it }
+    }
+
+    LaunchedEffect(meta.id, restoreHeroFocusToken, isSeries) {
+        if (!isSeries && restoreHeroFocusToken > 0) {
+            runCatching { heroFocus.requestFocus() }
+        }
+    }
 
     fun playVideo(video: Video) {
         onPlay(
@@ -222,7 +250,10 @@ private fun AioPlayRichDetails(
                         onToggleEpisodeWatched = {},
                         showEpisodeOptions = false,
                         selectedSeason = selectedSeason,
-                        upFocusRequester = if (seasons.isNotEmpty()) seasonFocus else heroFocus
+                        upFocusRequester = if (seasons.isNotEmpty()) seasonFocus else heroFocus,
+                        episodeFocusRequesters = episodeFocusRequesters,
+                        restoreEpisodeId = restoreEpisodeId,
+                        restoreFocusToken = restoreEpisodeFocusToken
                     )
                 }
             }

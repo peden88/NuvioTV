@@ -138,10 +138,26 @@ private fun AioPlayRichDetails(
             .fillMaxSize()
             .background(AioPlayBackgroundGradient)
     ) {
+        val backdrop = meta.background ?: meta.landscapePoster ?: meta.poster
+        if (!backdrop.isNullOrBlank()) {
+            AsyncImage(
+                model = backdrop,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(AioPlayContentDim)
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.40f),
+                        0.55f to Color.Black.copy(alpha = 0.58f),
+                        1f to Color.Black.copy(alpha = 0.72f)
+                    )
+                )
         )
 
         LazyColumn(
@@ -149,7 +165,7 @@ private fun AioPlayRichDetails(
                 .fillMaxSize()
                 .padding(28.dp)
                 .clip(RoundedCornerShape(22.dp))
-                .background(AioPlayDetailCard),
+                .background(AioPlayDetailCard.copy(alpha = 0.90f)),
             contentPadding = PaddingValues(bottom = 44.dp)
         ) {
             item(key = "hero") {

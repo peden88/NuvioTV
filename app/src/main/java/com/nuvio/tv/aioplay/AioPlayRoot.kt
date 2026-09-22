@@ -52,6 +52,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -672,14 +673,17 @@ private fun AioPlayHomeScreen(
                     painter = painterResource(id = R.drawable.aioplay_brand),
                     contentDescription = "AIOPlay",
                     modifier = Modifier
-                        .width(50.dp)
+                        .width(25.dp)
                         .aspectRatio(1f),
                     contentScale = ContentScale.Fit
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "AIOPlay",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 8.sp,
+                        lineHeight = 10.sp
+                    ),
                     color = NuvioTheme.colors.TextPrimary,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
@@ -725,7 +729,7 @@ private fun AioPlayHomeScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .padding(horizontal = 24.dp, vertical = 18.dp)
+                .padding(start = 24.dp, end = 24.dp, bottom = 18.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -907,8 +911,8 @@ private fun AioPlaySectionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = remember { RoundedCornerShape(20.dp) }
-    val innerShape = remember { RoundedCornerShape(17.dp) }
+    val shape = remember { RoundedCornerShape(14.dp) }
+    val innerShape = remember { RoundedCornerShape(12.dp) }
     var isFocused by remember { mutableStateOf(false) }
 
     Card(
@@ -1008,11 +1012,14 @@ private fun AioPlayNavCard(
                         Modifier.background(AioPlayPillIdle, innerShape)
                     }
                 )
-                .padding(horizontal = 18.dp, vertical = 8.dp)
+                .padding(horizontal = 13.dp, vertical = 6.dp)
         ) {
             Text(
                 text = text,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp
+                ),
                 color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

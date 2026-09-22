@@ -95,9 +95,9 @@ private const val DETAIL_ROUTE =
 private const val SERIES_ROUTE =
     "aioplay_series?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}&logo={logo}"
 private const val LOADING_ROUTE =
-    "aioplay_loading?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}&logo={logo}&contentType={contentType}&sessionId={sessionId}"
+    "aioplay_loading?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}&logo={logo}&contentType={contentType}&sessionId={sessionId}&parentId={parentId}&parentName={parentName}&season={season}&episode={episode}&episodeTitle={episodeTitle}"
 private const val PLAYER_ROUTE =
-    "aioplay_player?streamUrl={streamUrl}&title={title}&headers={headers}&contentId={contentId}&contentType={contentType}&contentName={contentName}&poster={poster}&backdrop={backdrop}&logo={logo}&videoId={videoId}&aioplaySessionId={aioplaySessionId}&aioplayContentType={aioplayContentType}"
+    "aioplay_player?streamUrl={streamUrl}&title={title}&headers={headers}&contentId={contentId}&contentType={contentType}&contentName={contentName}&poster={poster}&backdrop={backdrop}&logo={logo}&videoId={videoId}&season={season}&episode={episode}&episodeTitle={episodeTitle}&aioplaySessionId={aioplaySessionId}&aioplayContentType={aioplayContentType}"
 
 private fun encode(value: String?): String =
     URLEncoder.encode(value.orEmpty(), "UTF-8").replace("+", "%20")
@@ -114,7 +114,12 @@ private fun loadingRoute(
         "&backdrop=" + encode(item.background) +
         "&logo=" + encode(item.logo) +
         "&contentType=" + encode(contentType) +
-        "&sessionId=" + encode(sessionId)
+        "&sessionId=" + encode(sessionId) +
+        "&parentId=" + encode(item.parentId) +
+        "&parentName=" + encode(item.parentName) +
+        "&season=" + encode(item.season?.toString()) +
+        "&episode=" + encode(item.episode?.toString()) +
+        "&episodeTitle=" + encode(item.episodeTitle)
 
 private fun detailRoute(item: AioPlayItem): String =
     "aioplay_detail" +
@@ -139,17 +144,28 @@ private fun playerRoute(
     playback: AioPlayPlayback
 ): String {
     val headers = JSONObject(playback.target.requestHeaders).toString()
+    val trackingContentType = when (contentType.lowercase()) {
+        "episode" -> "series"
+        "movie" -> "movie"
+        else -> "tv"
+    }
+    val trackingContentId = item.parentId ?: item.id
+    val trackingContentName = item.parentName ?: item.name
+    val displayTitle = item.episodeTitle ?: item.name
     return "aioplay_player" +
         "?streamUrl=" + encode(playback.target.url) +
-        "&title=" + encode(item.name) +
+        "&title=" + encode(displayTitle) +
         "&headers=" + encode(headers) +
-        "&contentId=" + encode(item.id) +
-        "&contentType=tv" +
-        "&contentName=" + encode(item.name) +
+        "&contentId=" + encode(trackingContentId) +
+        "&contentType=" + encode(trackingContentType) +
+        "&contentName=" + encode(trackingContentName) +
         "&poster=" + encode(item.poster) +
         "&backdrop=" + encode(item.background) +
         "&logo=" + encode(item.logo) +
         "&videoId=" + encode(item.id) +
+        "&season=" + encode(item.season?.toString()) +
+        "&episode=" + encode(item.episode?.toString()) +
+        "&episodeTitle=" + encode(item.episodeTitle) +
         "&aioplaySessionId=" + encode(playback.sessionId) +
         "&aioplayContentType=" + encode(contentType)
 }
@@ -412,7 +428,12 @@ private fun AioPlaySignedInApp(
                 navArgument("backdrop") { type = NavType.StringType; defaultValue = "" },
                 navArgument("logo") { type = NavType.StringType; defaultValue = "" },
                 navArgument("contentType") { type = NavType.StringType; defaultValue = "sport_event" },
-                navArgument("sessionId") { type = NavType.StringType; defaultValue = "" }
+                navArgument("sessionId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("parentId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("parentName") { type = NavType.StringType; defaultValue = "" },
+                navArgument("season") { type = NavType.StringType; defaultValue = "" },
+                navArgument("episode") { type = NavType.StringType; defaultValue = "" },
+                navArgument("episodeTitle") { type = NavType.StringType; defaultValue = "" }
             )
         ) { entry ->
             val item = AioPlayItem(
@@ -422,7 +443,12 @@ private fun AioPlaySignedInApp(
                 description = null,
                 poster = entry.arguments?.getString("poster")?.takeIf { it.isNotBlank() },
                 background = entry.arguments?.getString("backdrop")?.takeIf { it.isNotBlank() },
-                logo = entry.arguments?.getString("logo")?.takeIf { it.isNotBlank() }
+                logo = entry.arguments?.getString("logo")?.takeIf { it.isNotBlank() },
+                parentId = entry.arguments?.getString("parentId")?.takeIf { it.isNotBlank() },
+                parentName = entry.arguments?.getString("parentName")?.takeIf { it.isNotBlank() },
+                season = entry.arguments?.getString("season")?.toIntOrNull(),
+                episode = entry.arguments?.getString("episode")?.toIntOrNull(),
+                episodeTitle = entry.arguments?.getString("episodeTitle")?.takeIf { it.isNotBlank() }
             )
             val contentType = entry.arguments?.getString("contentType")
                 ?.takeIf { it.isNotBlank() }
@@ -459,24 +485,35 @@ private fun AioPlaySignedInApp(
                 navArgument("backdrop") { type = NavType.StringType; defaultValue = "" },
                 navArgument("logo") { type = NavType.StringType; defaultValue = "" },
                 navArgument("videoId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("season") { type = NavType.StringType; defaultValue = "" },
+                navArgument("episode") { type = NavType.StringType; defaultValue = "" },
+                navArgument("episodeTitle") { type = NavType.StringType; defaultValue = "" },
                 navArgument("aioplaySessionId") { type = NavType.StringType; defaultValue = "" },
                 navArgument("aioplayContentType") { type = NavType.StringType; defaultValue = "sport_event" }
             )
         ) { entry ->
             val args = entry.arguments
             val sessionId = args?.getString("aioplaySessionId").orEmpty()
+            val fallbackContentType = args?.getString("aioplayContentType")
+                ?.takeIf { it.isNotBlank() }
+                ?: "sport_event"
+            val trackingContentId = args?.getString("contentId").orEmpty()
+            val videoId = args?.getString("videoId").orEmpty()
+            val contentName = args?.getString("contentName")?.takeIf { it.isNotBlank() }
             val item = AioPlayItem(
-                id = args?.getString("contentId").orEmpty(),
-                type = "tv",
+                id = if (fallbackContentType == "episode") videoId.ifBlank { trackingContentId } else trackingContentId,
+                type = if (fallbackContentType == "episode") "series" else "tv",
                 name = args?.getString("title").orEmpty(),
                 description = null,
                 poster = args?.getString("poster")?.takeIf { it.isNotBlank() },
                 background = args?.getString("backdrop")?.takeIf { it.isNotBlank() },
-                logo = args?.getString("logo")?.takeIf { it.isNotBlank() }
+                logo = args?.getString("logo")?.takeIf { it.isNotBlank() },
+                parentId = trackingContentId.takeIf { fallbackContentType == "episode" && it.isNotBlank() },
+                parentName = contentName.takeIf { fallbackContentType == "episode" },
+                season = args?.getString("season")?.toIntOrNull(),
+                episode = args?.getString("episode")?.toIntOrNull(),
+                episodeTitle = args?.getString("episodeTitle")?.takeIf { it.isNotBlank() }
             )
-            val fallbackContentType = args?.getString("aioplayContentType")
-                ?.takeIf { it.isNotBlank() }
-                ?: "sport_event"
 
             PlayerScreen(
                 onBackPress = { _, _, _, _, _ ->

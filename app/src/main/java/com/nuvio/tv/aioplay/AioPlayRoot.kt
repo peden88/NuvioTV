@@ -3,6 +3,7 @@
 package com.nuvio.tv.aioplay
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -68,6 +69,11 @@ import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.nuvio.tv.R
+import com.nuvio.tv.domain.model.CardDepthSurface
+import com.nuvio.tv.ui.components.FocusMarqueeText
+import com.nuvio.tv.ui.components.LocalCardDepthStyle
+import com.nuvio.tv.ui.components.PosterCardDefaults
+import com.nuvio.tv.ui.components.nuvioCardDepth
 import com.nuvio.tv.ui.screens.account.InputField
 import com.nuvio.tv.ui.screens.player.PlayerScreen
 import com.nuvio.tv.ui.screens.settings.PlaybackSettingsScreen
@@ -818,42 +824,48 @@ private fun AioPlaySectionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = remember { RoundedCornerShape(20.dp) }
+    var isFocused by remember { mutableStateOf(false) }
+    val border = CardDefaults.border(
+        focusedBorder = Border(
+            border = BorderStroke(NuvioTheme.spacing.xxs, Color.Transparent),
+            shape = shape
+        )
+    )
+
     Card(
         onClick = onClick,
-        modifier = modifier.width(if (text == "Continue Watching") 180.dp else 132.dp),
+        modifier = modifier
+            .width(if (text == "Continue Watching") 196.dp else 132.dp)
+            .onFocusChanged { isFocused = it.isFocused },
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
             containerColor = if (selected) {
                 NuvioTheme.colors.Secondary
             } else {
-                NuvioTheme.colors.BackgroundCard
+                Color.White.copy(alpha = 0.08f)
             },
-            focusedContainerColor = NuvioTheme.colors.FocusBackground
+            focusedContainerColor = NuvioTheme.colors.Secondary
         ),
-        border = CardDefaults.border(
-            focusedBorder = Border(
-                border = NuvioTheme.focusRing.border(2.dp),
-                shape = shape
-            )
-        ),
-        scale = CardDefaults.scale(focusedScale = 1.04f)
+        border = border,
+        scale = CardDefaults.scale(focusedScale = 1.0f)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 10.dp),
+                .padding(vertical = 10.dp, horizontal = 20.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = text,
-                style = MaterialTheme.typography.titleSmall,
-                color = if (selected) {
+                style = MaterialTheme.typography.titleMedium,
+                color = if (isFocused || selected) {
                     NuvioTheme.colors.OnSecondary
                 } else {
-                    NuvioTheme.colors.TextPrimary
+                    Color(0xFFE8E8EC)
                 },
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
             )
         }
     }
@@ -866,34 +878,43 @@ private fun AioPlayNavCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(10.dp)
+    val shape = remember { RoundedCornerShape(20.dp) }
+    var isFocused by remember { mutableStateOf(false) }
+    val border = CardDefaults.border(
+        focusedBorder = Border(
+            border = BorderStroke(NuvioTheme.spacing.xxs, Color.Transparent),
+            shape = shape
+        )
+    )
+
     Card(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .onFocusChanged { isFocused = it.isFocused },
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
             containerColor = if (selected) {
                 NuvioTheme.colors.Secondary
             } else {
-                NuvioTheme.colors.BackgroundCard
+                Color.White.copy(alpha = 0.08f)
             },
-            focusedContainerColor = NuvioTheme.colors.FocusBackground
+            focusedContainerColor = NuvioTheme.colors.Secondary
         ),
-        border = CardDefaults.border(
-            focusedBorder = Border(
-                border = NuvioTheme.focusRing.border(2.dp),
-                shape = shape
-            )
-        ),
-        scale = CardDefaults.scale(focusedScale = 1.02f)
+        border = border,
+        scale = CardDefaults.scale(focusedScale = 1.0f)
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (selected) NuvioTheme.colors.OnSecondary else NuvioTheme.colors.TextPrimary,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (isFocused || selected) {
+                NuvioTheme.colors.OnSecondary
+            } else {
+                Color(0xFFE8E8EC)
+            },
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp)
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
         )
     }
 }
@@ -905,16 +926,84 @@ private fun AioPlayContentCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (posterMode) {
+        val posterStyle = PosterCardDefaults.Style
+        val shape = remember(posterStyle.cornerRadius) {
+            RoundedCornerShape(posterStyle.cornerRadius)
+        }
+        val cardDepthStyle = LocalCardDepthStyle.current
+        var isFocused by remember { mutableStateOf(false) }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 3.dp, vertical = 5.dp)
+        ) {
+            Card(
+                onClick = onClick,
+                modifier = modifier
+                    .fillMaxWidth()
+                    .aspectRatio(2f / 3f)
+                    .onFocusChanged { isFocused = it.isFocused },
+                shape = CardDefaults.shape(shape = shape),
+                colors = CardDefaults.colors(
+                    containerColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent
+                ),
+                border = CardDefaults.border(
+                    focusedBorder = Border(
+                        border = NuvioTheme.focusRing.border(posterStyle.focusedBorderWidth),
+                        shape = shape
+                    )
+                ),
+                scale = CardDefaults.scale(focusedScale = posterStyle.focusedScale)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(shape)
+                        .nuvioCardDepth(
+                            shape = shape,
+                            surface = CardDepthSurface.POSTERS,
+                            style = cardDepthStyle
+                        )
+                        .background(NuvioTheme.colors.BackgroundCard)
+                ) {
+                    val image = item.poster ?: item.background
+                    if (!image.isNullOrBlank()) {
+                        AsyncImage(
+                            model = image,
+                            contentDescription = item.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
+            }
+
+            FocusMarqueeText(
+                text = item.name,
+                focused = isFocused,
+                style = MaterialTheme.typography.titleMedium,
+                color = NuvioTheme.colors.TextPrimary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        top = NuvioTheme.spacing.sm,
+                        start = NuvioTheme.spacing.xxs,
+                        end = NuvioTheme.spacing.xxs
+                    )
+            )
+        }
+        return
+    }
+
     val shape = RoundedCornerShape(12.dp)
     Card(
         onClick = onClick,
         modifier = modifier
-            .padding(
-                horizontal = if (posterMode) 3.dp else 0.dp,
-                vertical = if (posterMode) 5.dp else 0.dp
-            )
             .fillMaxWidth()
-            .aspectRatio(if (posterMode) 2f / 3f else 16f / 9f),
+            .aspectRatio(16f / 9f),
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
             containerColor = NuvioTheme.colors.BackgroundCard,
@@ -926,7 +1015,7 @@ private fun AioPlayContentCard(
                 shape = shape
             )
         ),
-        scale = CardDefaults.scale(focusedScale = if (posterMode) 1.02f else 1.035f)
+        scale = CardDefaults.scale(focusedScale = 1.035f)
     ) {
         Box(
             modifier = Modifier
@@ -934,11 +1023,7 @@ private fun AioPlayContentCard(
                 .clip(shape)
                 .background(NuvioTheme.colors.BackgroundCard)
         ) {
-            val image = if (posterMode) {
-                item.poster ?: item.background
-            } else {
-                item.background ?: item.poster
-            }
+            val image = item.background ?: item.poster
             if (!image.isNullOrBlank()) {
                 AsyncImage(
                     model = image,
@@ -955,7 +1040,7 @@ private fun AioPlayContentCard(
                         Brush.verticalGradient(
                             listOf(
                                 Color.Transparent,
-                                Color.Black.copy(alpha = if (posterMode) 0.08f else 0.24f),
+                                Color.Black.copy(alpha = 0.24f),
                                 Color.Black.copy(alpha = 0.9f)
                             )
                         )
@@ -966,21 +1051,17 @@ private fun AioPlayContentCard(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .padding(if (posterMode) 12.dp else 14.dp)
+                    .padding(14.dp)
             ) {
                 Text(
                     text = item.name,
-                    style = if (posterMode) {
-                        MaterialTheme.typography.titleSmall
-                    } else {
-                        MaterialTheme.typography.titleMedium
-                    },
+                    style = MaterialTheme.typography.titleMedium,
                     color = Color.White,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (!posterMode && !item.description.isNullOrBlank()) {
+                if (!item.description.isNullOrBlank()) {
                     Text(
                         text = item.description.lineSequence().firstOrNull().orEmpty(),
                         style = MaterialTheme.typography.bodySmall,

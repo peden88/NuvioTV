@@ -328,8 +328,7 @@ private fun AioPlaySignedInApp(
                             } else {
                                 "sport_event"
                             }
-                            val resumeItem = viewModel.withSharedResume(item, contentType)
-                            navController.navigate(loadingRoute(resumeItem, contentType))
+                            navController.navigate(loadingRoute(item, contentType))
                         }
                         AioPlaySection.VOD -> {
                             navController.navigate(detailRoute(item))
@@ -340,7 +339,8 @@ private fun AioPlaySignedInApp(
                             } else {
                                 "movie"
                             }
-                            navController.navigate(loadingRoute(item, contentType))
+                            val resumeItem = viewModel.withSharedResume(item, contentType)
+                            navController.navigate(loadingRoute(resumeItem, contentType))
                         }
                     }
                 },

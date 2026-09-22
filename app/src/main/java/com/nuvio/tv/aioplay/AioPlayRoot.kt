@@ -661,7 +661,7 @@ private fun AioPlayHomeScreen(
                 .fillMaxHeight()
                 .background(AioPlayGlass)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -695,7 +695,7 @@ private fun AioPlayHomeScreen(
                     .weight(1f)
                     .fillMaxWidth(),
                 contentPadding = PaddingValues(bottom = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(state.catalogs, key = { it.selectionKey }) { catalog ->
                     val requester = navFocusRequesters[catalog.selectionKey]
@@ -911,8 +911,8 @@ private fun AioPlaySectionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = remember { RoundedCornerShape(14.dp) }
-    val innerShape = remember { RoundedCornerShape(12.dp) }
+    val shape = remember { RoundedCornerShape(20.dp) }
+    val innerShape = remember { RoundedCornerShape(17.dp) }
     var isFocused by remember { mutableStateOf(false) }
 
     Card(
@@ -972,8 +972,8 @@ private fun AioPlayNavCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = remember { RoundedCornerShape(20.dp) }
-    val innerShape = remember { RoundedCornerShape(17.dp) }
+    val shape = remember { RoundedCornerShape(14.dp) }
+    val innerShape = remember { RoundedCornerShape(12.dp) }
     var isFocused by remember { mutableStateOf(false) }
 
     Card(
@@ -1004,7 +1004,7 @@ private fun AioPlayNavCard(
                         Modifier.background(AioPlayAccentGradient, shape)
                     }
                 )
-                .padding(if (isFocused) 3.dp else 2.dp)
+                .padding(if (isFocused) 2.dp else 1.5.dp)
                 .then(
                     if (selected) {
                         Modifier.background(AioPlayAccentGradient, innerShape)

@@ -319,9 +319,18 @@ private fun AioPlaySignedInApp(
         navController = navController,
         startDestination = HOME_ROUTE
     ) {
-        composable(HOME_ROUTE) {
+        composable(HOME_ROUTE) { entry ->
+            val restoreContentItemId by entry.savedStateHandle
+                .getStateFlow("aioplay_home_restore_item_id", "")
+                .collectAsState()
+            val restoreContentFocusToken by entry.savedStateHandle
+                .getStateFlow("aioplay_home_restore_focus_token", 0)
+                .collectAsState()
+
             AioPlayHomeScreen(
                 state = state,
+                restoreContentItemId = restoreContentItemId.takeIf { it.isNotBlank() },
+                restoreContentFocusToken = restoreContentFocusToken,
                 onSection = viewModel::selectSection,
                 onCatalog = viewModel::selectCatalog,
                 onItem = { item ->
@@ -375,6 +384,19 @@ private fun AioPlaySignedInApp(
                 navArgument("logo") { type = NavType.StringType; defaultValue = "" }
             )
         ) { entry ->
+            val restoreEpisodeId by entry.savedStateHandle
+                .getStateFlow("aioplay_detail_restore_episode_id", "")
+                .collectAsState()
+            val restoreEpisodeSeason by entry.savedStateHandle
+                .getStateFlow("aioplay_detail_restore_episode_season", -1)
+                .collectAsState()
+            val restoreEpisodeFocusToken by entry.savedStateHandle
+                .getStateFlow("aioplay_detail_restore_episode_focus_token", 0)
+                .collectAsState()
+            val restoreHeroFocusToken by entry.savedStateHandle
+                .getStateFlow("aioplay_detail_restore_hero_focus_token", 0)
+                .collectAsState()
+
             val preview = AioPlayItem(
                 id = entry.arguments?.getString("itemId").orEmpty(),
                 type = entry.arguments?.getString("itemType").orEmpty().ifBlank { "movie" },
@@ -391,7 +413,18 @@ private fun AioPlaySignedInApp(
                     val resumeItem = viewModel.withSharedResume(item, contentType)
                     navController.navigate(loadingRoute(resumeItem, contentType))
                 },
-                onBack = { navController.popBackStack() }
+                onBack = {
+                    navController.previousBackStackEntry?.savedStateHandle?.let { homeState ->
+                        val token = homeState.get<Int>("aioplay_home_restore_focus_token") ?: 0
+                        homeState["aioplay_home_restore_item_id"] = preview.id
+                        homeState["aioplay_home_restore_focus_token"] = token + 1
+                    }
+                    navController.popBackStack()
+                },
+                restoreEpisodeId = restoreEpisodeId.takeIf { it.isNotBlank() },
+                restoreEpisodeSeason = restoreEpisodeSeason.takeIf { it >= 0 },
+                restoreEpisodeFocusToken = restoreEpisodeFocusToken,
+                restoreHeroFocusToken = restoreHeroFocusToken
             )
         }
 
@@ -481,12 +514,20 @@ private fun AioPlaySignedInApp(
                 viewModel = viewModel,
                 onReady = { playback ->
                     navController.navigate(playerRoute(item, contentType, playback)) {
-                        popUpTo(HOME_ROUTE) { inclusive = false }
+                        if (contentType == "movie" || contentType == "episode") {
+                            popUpTo(DETAIL_ROUTE) { inclusive = false }
+                        } else {
+                            popUpTo(HOME_ROUTE) { inclusive = false }
+                        }
                     }
                 },
                 onBack = {
                     if (sessionId.isNotBlank()) viewModel.finishPlayback(sessionId)
-                    navController.popBackStack(HOME_ROUTE, inclusive = false)
+                    if (contentType == "movie" || contentType == "episode") {
+                        navController.popBackStack()
+                    } else {
+                        navController.popBackStack(HOME_ROUTE, inclusive = false)
+                    }
                 }
             )
         }
@@ -538,6 +579,32 @@ private fun AioPlaySignedInApp(
                 resumeDurationMs = args?.getString("aioplayResumeDurationMs")?.toLongOrNull()
             )
 
+            fun returnAfterVodPlayback() {
+                val detailEntry = navController.previousBackStackEntry
+                if (fallbackContentType == "episode") {
+                    detailEntry?.savedStateHandle?.let { detailState ->
+                        val token = detailState.get<Int>("aioplay_detail_restore_episode_focus_token") ?: 0
+                        detailState["aioplay_detail_restore_episode_id"] = item.id
+                        detailState["aioplay_detail_restore_episode_season"] = item.season ?: -1
+                        detailState["aioplay_detail_restore_episode_focus_token"] = token + 1
+                    }
+                } else if (fallbackContentType == "movie") {
+                    detailEntry?.savedStateHandle?.let { detailState ->
+                        val token = detailState.get<Int>("aioplay_detail_restore_hero_focus_token") ?: 0
+                        detailState["aioplay_detail_restore_hero_focus_token"] = token + 1
+                    }
+                }
+                navController.popBackStack()
+            }
+
+            fun leavePlayer() {
+                if (fallbackContentType == "movie" || fallbackContentType == "episode") {
+                    returnAfterVodPlayback()
+                } else {
+                    navController.popBackStack(HOME_ROUTE, inclusive = false)
+                }
+            }
+
             LaunchedEffect(sessionId) {
                 if (sessionId.isBlank()) return@LaunchedEffect
                 while (true) {
@@ -545,7 +612,7 @@ private fun AioPlaySignedInApp(
                     val heartbeat = viewModel.heartbeatPlayback(sessionId)
                     if (heartbeat.isFailure) {
                         viewModel.finishPlayback(sessionId)
-                        navController.popBackStack(HOME_ROUTE, inclusive = false)
+                        leavePlayer()
                         break
                     }
                 }
@@ -554,11 +621,11 @@ private fun AioPlaySignedInApp(
             PlayerScreen(
                 onBackPress = { _, _, _, _, _ ->
                     if (sessionId.isNotBlank()) viewModel.finishPlayback(sessionId)
-                    navController.popBackStack(HOME_ROUTE, inclusive = false)
+                    leavePlayer()
                 },
                 onPlaybackErrorBack = {
                     if (sessionId.isBlank()) {
-                        navController.popBackStack(HOME_ROUTE, inclusive = false)
+                        leavePlayer()
                     } else {
                         navController.navigate(
                             loadingRoute(
@@ -567,13 +634,17 @@ private fun AioPlaySignedInApp(
                                 sessionId = sessionId
                             )
                         ) {
-                            popUpTo(HOME_ROUTE) { inclusive = false }
+                            if (fallbackContentType == "movie" || fallbackContentType == "episode") {
+                                popUpTo(DETAIL_ROUTE) { inclusive = false }
+                            } else {
+                                popUpTo(HOME_ROUTE) { inclusive = false }
+                            }
                         }
                     }
                 },
                 onPlaybackEnded = { _, _, _, _ ->
                     if (sessionId.isNotBlank()) viewModel.finishPlayback(sessionId)
-                    navController.popBackStack(HOME_ROUTE, inclusive = false)
+                    leavePlayer()
                 }
             )
         }
@@ -583,6 +654,8 @@ private fun AioPlaySignedInApp(
 @Composable
 private fun AioPlayHomeScreen(
     state: AioPlayUiState,
+    restoreContentItemId: String?,
+    restoreContentFocusToken: Int,
     onSection: (AioPlaySection) -> Unit,
     onCatalog: (AioPlayCatalog) -> Unit,
     onItem: (AioPlayItem) -> Unit,
@@ -663,6 +736,32 @@ private fun AioPlayHomeScreen(
                 }
             }
         }
+    }
+
+    LaunchedEffect(
+        restoreContentFocusToken,
+        restoreContentItemId,
+        state.selectedSection,
+        state.selectedCatalogId,
+        state.items
+    ) {
+        if (restoreContentFocusToken <= 0 || restoreContentItemId.isNullOrBlank()) {
+            return@LaunchedEffect
+        }
+        val targetIndex = state.items.indexOfFirst { it.id == restoreContentItemId }
+        if (targetIndex < 0) return@LaunchedEffect
+
+        val columnCount = if (state.selectedSection == AioPlaySection.LIVE) 3 else 6
+        val totalRows = (state.items.size + columnCount - 1) / columnCount
+        val targetRow = targetIndex / columnCount
+        val maxWindowStart = (totalRows - 2).coerceAtLeast(0)
+
+        contentWindowStartRow = when {
+            targetRow < contentWindowStartRow -> targetRow
+            targetRow > contentWindowStartRow + 1 -> targetRow - 1
+            else -> contentWindowStartRow
+        }.coerceIn(0, maxWindowStart)
+        pendingContentFocusId = restoreContentItemId
     }
 
     BackHandler {

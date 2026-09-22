@@ -48,7 +48,12 @@ data class AioPlayItem(
     val description: String?,
     val poster: String?,
     val background: String?,
-    val logo: String?
+    val logo: String?,
+    val parentId: String? = null,
+    val parentName: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val episodeTitle: String? = null
 )
 
 data class AioPlayPlaybackTarget(

@@ -780,6 +780,10 @@ private fun AioPlayHomeScreen(
                         .onFocusChanged {
                             if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
                         },
+                    colors = ButtonDefaults.colors(
+                        containerColor = AioPlayPillIdle,
+                        focusedContainerColor = AioPlayAccentBlue
+                    ),
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     Icon(
@@ -1396,20 +1400,30 @@ private fun AioPlayAccountScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(
-                onClick = onRefresh
+                onClick = onRefresh,
+                colors = ButtonDefaults.colors(
+                    containerColor = AioPlayPillIdle,
+                    focusedContainerColor = AioPlayAccentBlue
+                )
             ) {
                 Text("Refresh content")
             }
             Button(
                 onClick = onSignOut,
                 colors = ButtonDefaults.colors(
-                    containerColor = NuvioTheme.colors.Secondary,
-                    focusedContainerColor = NuvioTheme.colors.FocusBackground
+                    containerColor = AioPlayPillIdle,
+                    focusedContainerColor = AioPlayAccentViolet
                 )
             ) {
                 Text("Sign out")
             }
-            Button(onClick = onBack) {
+            Button(
+                onClick = onBack,
+                colors = ButtonDefaults.colors(
+                    containerColor = AioPlayPillIdle,
+                    focusedContainerColor = AioPlayAccentBlue
+                )
+            ) {
                 Text("Back")
             }
         }

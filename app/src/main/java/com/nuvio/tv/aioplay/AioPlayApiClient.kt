@@ -435,6 +435,7 @@ class AioPlayApiClient @Inject constructor(
         val body = JSONObject()
             .put("contentType", contentType)
             .put("id", item.id)
+            .put("title", item.name)
         if (!stremioType.isNullOrBlank()) body.put("stremioType", stremioType)
         val json = requestJson("/api/v1/play", method = "POST", token = token, body = body)
         return parsePlayback(json)
@@ -448,6 +449,15 @@ class AioPlayApiClient @Inject constructor(
             token = token
         )
         return parsePlayback(json)
+    }
+
+    suspend fun heartbeatPlayback(token: String, sessionId: String) {
+        val encoded = URLEncoder.encode(sessionId, "UTF-8").replace("+", "%20")
+        requestJson(
+            "/api/v1/playback/$encoded/heartbeat",
+            method = "POST",
+            token = token
+        )
     }
 
     suspend fun finishPlayback(token: String, sessionId: String) {

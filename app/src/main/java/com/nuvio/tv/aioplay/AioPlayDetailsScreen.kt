@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -134,37 +136,20 @@ private fun AioPlayRichDetails(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioTheme.colors.Background)
+            .background(AioPlayBackgroundGradient)
     ) {
-        val backdrop = meta.background ?: meta.landscapePoster ?: meta.poster
-        if (!backdrop.isNullOrBlank()) {
-            AsyncImage(
-                model = backdrop,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(560.dp)
-                    .align(Alignment.TopCenter),
-                contentScale = ContentScale.Crop
-            )
-        }
-
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(590.dp)
-                .align(Alignment.TopCenter)
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0.18f),
-                        0.58f to Color.Black.copy(alpha = 0.46f),
-                        1f to NuvioTheme.colors.Background
-                    )
-                )
+                .fillMaxSize()
+                .background(AioPlayContentDim)
         )
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(28.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(AioPlayDetailCard),
             contentPadding = PaddingValues(bottom = 44.dp)
         ) {
             item(key = "hero") {
@@ -273,7 +258,7 @@ private fun AioPlayDetailsStatus(message: String) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioTheme.colors.Background),
+            .background(AioPlayBackgroundGradient),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -299,7 +284,7 @@ private fun AioPlayDetailsError(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioTheme.colors.Background),
+            .background(AioPlayBackgroundGradient),
         contentAlignment = Alignment.Center
     ) {
         Column(

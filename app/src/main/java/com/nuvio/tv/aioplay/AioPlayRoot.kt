@@ -79,6 +79,7 @@ import com.nuvio.tv.ui.screens.player.PlayerScreen
 import com.nuvio.tv.ui.screens.settings.PlaybackSettingsScreen
 import com.nuvio.tv.ui.theme.NuvioTheme
 import java.net.URLEncoder
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 
 private const val HOME_ROUTE = "aioplay_home"
@@ -534,6 +535,19 @@ private fun AioPlaySignedInApp(
                 resumePositionMs = args?.getString("aioplayResumePositionMs")?.toLongOrNull(),
                 resumeDurationMs = args?.getString("aioplayResumeDurationMs")?.toLongOrNull()
             )
+
+            LaunchedEffect(sessionId) {
+                if (sessionId.isBlank()) return@LaunchedEffect
+                while (true) {
+                    delay(30_000)
+                    val heartbeat = viewModel.heartbeatPlayback(sessionId)
+                    if (heartbeat.isFailure) {
+                        viewModel.finishPlayback(sessionId)
+                        navController.popBackStack(HOME_ROUTE, inclusive = false)
+                        break
+                    }
+                }
+            }
 
             PlayerScreen(
                 onBackPress = { _, _, _, _, _ ->

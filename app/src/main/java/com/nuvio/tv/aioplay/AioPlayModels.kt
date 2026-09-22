@@ -53,7 +53,9 @@ data class AioPlayItem(
     val parentName: String? = null,
     val season: Int? = null,
     val episode: Int? = null,
-    val episodeTitle: String? = null
+    val episodeTitle: String? = null,
+    val resumePositionMs: Long? = null,
+    val resumeDurationMs: Long? = null
 )
 
 data class AioPlayPlaybackTarget(

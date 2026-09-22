@@ -1010,7 +1010,6 @@ private fun AioPlayHomeScreen(
 }
 
 @Composable
-private fun AioPlaySectionCard@Composable
 private fun AioPlaySectionCard(
     text: String,
     selected: Boolean,

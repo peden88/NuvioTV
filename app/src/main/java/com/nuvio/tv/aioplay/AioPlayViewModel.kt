@@ -128,7 +128,7 @@ class AioPlayViewModel @Inject constructor(
     private fun rebuildContinueWatching() {
         continueWatchingItems = sharedProgressByKey.values
             .asSequence()
-            .filter(WatchProgress::isInProgress)
+            .filter { it.isInProgress() }
             .sortedByDescending(WatchProgress::lastWatched)
             .map { progress ->
                 val isSeries = isSeriesProgress(progress)

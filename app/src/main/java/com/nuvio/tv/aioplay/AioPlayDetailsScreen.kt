@@ -169,7 +169,7 @@ private fun AioPlayRichDetails(
                 .fillMaxSize()
                 .padding(28.dp)
                 .clip(RoundedCornerShape(22.dp))
-                .background(AioPlayDetailCard.copy(alpha = 0.90f)),
+                .background(AioPlayDetailCard.copy(alpha = 0.765f)),
             contentPadding = PaddingValues(bottom = 44.dp)
         ) {
             item(key = "hero") {

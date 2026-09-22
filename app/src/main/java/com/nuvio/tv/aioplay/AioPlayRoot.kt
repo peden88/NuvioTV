@@ -739,7 +739,25 @@ private fun AioPlayHomeScreen(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (state.capabilities?.vodEnabled == true) {
+                        AioPlaySectionCard(
+                            text = "VOD",
+                            selected = state.selectedSection == AioPlaySection.VOD,
+                            onClick = {
+                                pendingSectionFocus = AioPlaySection.VOD
+                                onSection(AioPlaySection.VOD)
+                            },
+                            modifier = Modifier
+                                .focusRequester(vodFocus)
+                                .onFocusChanged {
+                                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                                }
+                        )
+                    }
                     if (state.capabilities?.sportsEnabled == true) {
+                        if (state.capabilities?.vodEnabled == true) {
+                            Spacer(modifier = Modifier.width(10.dp))
+                        }
                         AioPlaySectionCard(
                             text = "Live",
                             selected = state.selectedSection == AioPlaySection.LIVE,
@@ -755,20 +773,6 @@ private fun AioPlayHomeScreen(
                         )
                     }
                     if (state.capabilities?.vodEnabled == true) {
-                        Spacer(modifier = Modifier.width(10.dp))
-                        AioPlaySectionCard(
-                            text = "VOD",
-                            selected = state.selectedSection == AioPlaySection.VOD,
-                            onClick = {
-                                pendingSectionFocus = AioPlaySection.VOD
-                                onSection(AioPlaySection.VOD)
-                            },
-                            modifier = Modifier
-                                .focusRequester(vodFocus)
-                                .onFocusChanged {
-                                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
-                                }
-                        )
                         Spacer(modifier = Modifier.width(10.dp))
                         AioPlaySectionCard(
                             text = "Continue Watching",
@@ -904,9 +908,8 @@ private fun AioPlaySectionCard(
     modifier: Modifier = Modifier
 ) {
     val shape = remember { RoundedCornerShape(20.dp) }
-    val innerShape = remember { RoundedCornerShape(18.dp) }
+    val innerShape = remember { RoundedCornerShape(17.dp) }
     var isFocused by remember { mutableStateOf(false) }
-    val active = selected || isFocused
 
     Card(
         onClick = onClick,
@@ -924,15 +927,15 @@ private fun AioPlaySectionCard(
                 shape = shape
             )
         ),
-        scale = CardDefaults.scale(focusedScale = 1.0f)
+        scale = CardDefaults.scale(focusedScale = 1.035f)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(AioPlayAccentGradient, shape)
-                .padding(2.dp)
+                .background(if (isFocused) Color.White else AioPlayAccentGradient, shape)
+                .padding(if (isFocused) 3.dp else 2.dp)
                 .then(
-                    if (active) {
+                    if (selected) {
                         Modifier.background(AioPlayAccentGradient, innerShape)
                     } else {
                         Modifier.background(AioPlayPillIdle, innerShape)
@@ -960,9 +963,8 @@ private fun AioPlayNavCard(
     modifier: Modifier = Modifier
 ) {
     val shape = remember { RoundedCornerShape(20.dp) }
-    val innerShape = remember { RoundedCornerShape(18.dp) }
+    val innerShape = remember { RoundedCornerShape(17.dp) }
     var isFocused by remember { mutableStateOf(false) }
-    val active = selected || isFocused
 
     Card(
         onClick = onClick,
@@ -980,15 +982,15 @@ private fun AioPlayNavCard(
                 shape = shape
             )
         ),
-        scale = CardDefaults.scale(focusedScale = 1.0f)
+        scale = CardDefaults.scale(focusedScale = 1.025f)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(AioPlayAccentGradient, shape)
-                .padding(2.dp)
+                .background(if (isFocused) Color.White else AioPlayAccentGradient, shape)
+                .padding(if (isFocused) 3.dp else 2.dp)
                 .then(
-                    if (active) {
+                    if (selected) {
                         Modifier.background(AioPlayAccentGradient, innerShape)
                     } else {
                         Modifier.background(AioPlayPillIdle, innerShape)

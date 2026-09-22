@@ -182,22 +182,28 @@ fun AioPlayRoot(
     val state by viewModel.state.collectAsState()
 
     NuvioTheme {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            colors = SurfaceDefaults.colors(containerColor = NuvioTheme.colors.Background)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AioPlayBackgroundGradient)
         ) {
-            when {
-                state.checkingSession -> AioPlayCenteredStatus("Signing in…")
-                !state.signedIn -> AioPlayLoginScreen(
-                    busy = state.loginBusy,
-                    error = state.error,
-                    onSignIn = viewModel::signIn,
-                    onExit = onExit
-                )
-                else -> AioPlaySignedInApp(
-                    state = state,
-                    viewModel = viewModel
-                )
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                colors = SurfaceDefaults.colors(containerColor = Color.Transparent)
+            ) {
+                when {
+                    state.checkingSession -> AioPlayCenteredStatus("Signing in…")
+                    !state.signedIn -> AioPlayLoginScreen(
+                        busy = state.loginBusy,
+                        error = state.error,
+                        onSignIn = viewModel::signIn,
+                        onExit = onExit
+                    )
+                    else -> AioPlaySignedInApp(
+                        state = state,
+                        viewModel = viewModel
+                    )
+                }
             }
         }
     }
@@ -222,14 +228,14 @@ private fun AioPlayLoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioTheme.colors.Background),
+            .background(AioPlayBackgroundGradient),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .width(480.dp)
                 .clip(RoundedCornerShape(22.dp))
-                .background(NuvioTheme.colors.BackgroundElevated)
+                .background(AioPlayDetailCard)
                 .padding(34.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -632,13 +638,13 @@ private fun AioPlayHomeScreen(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioTheme.colors.Background)
+            .background(AioPlayBackgroundGradient)
     ) {
         Column(
             modifier = Modifier
                 .width(205.dp)
                 .fillMaxHeight()
-                .background(NuvioTheme.colors.BackgroundElevated)
+                .background(AioPlayGlass)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
@@ -708,7 +714,11 @@ private fun AioPlayHomeScreen(
                 .padding(horizontal = 24.dp, vertical = 18.dp)
         ) {
             Box(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(AioPlayGlass)
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
                 Row(
                     modifier = Modifier.align(Alignment.Center),
@@ -876,13 +886,9 @@ private fun AioPlaySectionCard(
     modifier: Modifier = Modifier
 ) {
     val shape = remember { RoundedCornerShape(20.dp) }
+    val innerShape = remember { RoundedCornerShape(18.dp) }
     var isFocused by remember { mutableStateOf(false) }
-    val border = CardDefaults.border(
-        focusedBorder = Border(
-            border = BorderStroke(NuvioTheme.spacing.xxs, Color.Transparent),
-            shape = shape
-        )
-    )
+    val active = selected || isFocused
 
     Card(
         onClick = onClick,
@@ -891,30 +897,36 @@ private fun AioPlaySectionCard(
             .onFocusChanged { isFocused = it.isFocused },
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
-            containerColor = if (selected) {
-                NuvioTheme.colors.Secondary
-            } else {
-                Color.White.copy(alpha = 0.08f)
-            },
-            focusedContainerColor = NuvioTheme.colors.Secondary
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent
         ),
-        border = border,
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(1.dp, Color.Transparent),
+                shape = shape
+            )
+        ),
         scale = CardDefaults.scale(focusedScale = 1.0f)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 10.dp, horizontal = 20.dp),
+                .background(AioPlayAccentGradient, shape)
+                .padding(2.dp)
+                .then(
+                    if (active) {
+                        Modifier.background(AioPlayAccentGradient, innerShape)
+                    } else {
+                        Modifier.background(AioPlayPillIdle, innerShape)
+                    }
+                )
+                .padding(vertical = 8.dp, horizontal = 18.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = text,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (isFocused || selected) {
-                    NuvioTheme.colors.OnSecondary
-                } else {
-                    Color(0xFFE8E8EC)
-                },
+                color = Color.White,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1
             )
@@ -930,13 +942,9 @@ private fun AioPlayNavCard(
     modifier: Modifier = Modifier
 ) {
     val shape = remember { RoundedCornerShape(20.dp) }
+    val innerShape = remember { RoundedCornerShape(18.dp) }
     var isFocused by remember { mutableStateOf(false) }
-    val border = CardDefaults.border(
-        focusedBorder = Border(
-            border = BorderStroke(NuvioTheme.spacing.xxs, Color.Transparent),
-            shape = shape
-        )
-    )
+    val active = selected || isFocused
 
     Card(
         onClick = onClick,
@@ -945,28 +953,39 @@ private fun AioPlayNavCard(
             .onFocusChanged { isFocused = it.isFocused },
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
-            containerColor = if (selected) {
-                NuvioTheme.colors.Secondary
-            } else {
-                Color.White.copy(alpha = 0.08f)
-            },
-            focusedContainerColor = NuvioTheme.colors.Secondary
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent
         ),
-        border = border,
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(1.dp, Color.Transparent),
+                shape = shape
+            )
+        ),
         scale = CardDefaults.scale(focusedScale = 1.0f)
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.titleMedium,
-            color = if (isFocused || selected) {
-                NuvioTheme.colors.OnSecondary
-            } else {
-                Color(0xFFE8E8EC)
-            },
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(AioPlayAccentGradient, shape)
+                .padding(2.dp)
+                .then(
+                    if (active) {
+                        Modifier.background(AioPlayAccentGradient, innerShape)
+                    } else {
+                        Modifier.background(AioPlayPillIdle, innerShape)
+                    }
+                )
+                .padding(horizontal = 18.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -1003,7 +1022,7 @@ private fun AioPlayContentCard(
                 ),
                 border = CardDefaults.border(
                     focusedBorder = Border(
-                        border = NuvioTheme.focusRing.border(posterStyle.focusedBorderWidth),
+                        border = BorderStroke(posterStyle.focusedBorderWidth, AioPlayAccentGradient),
                         shape = shape
                     )
                 ),
@@ -1062,7 +1081,7 @@ private fun AioPlayContentCard(
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = NuvioTheme.focusRing.border(3.dp),
+                border = BorderStroke(3.dp, AioPlayAccentGradient),
                 shape = shape
             )
         ),
@@ -1150,7 +1169,7 @@ private fun AioPlaySeriesScreen(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioTheme.colors.Background)
+            .background(AioPlayBackgroundGradient)
             .padding(28.dp)
     ) {
         val artwork = details?.item?.poster ?: series.poster
@@ -1285,7 +1304,7 @@ private fun AioPlayPlaybackLoadingScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioTheme.colors.Background),
+            .background(AioPlayBackgroundGradient),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -1346,14 +1365,14 @@ private fun AioPlayAccountScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioTheme.colors.Background),
+            .background(AioPlayBackgroundGradient),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .width(520.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(NuvioTheme.colors.BackgroundElevated)
+                .background(AioPlayDetailCard)
                 .padding(32.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -1402,7 +1421,7 @@ private fun AioPlayCenteredStatus(text: String) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NuvioTheme.colors.Background),
+            .background(AioPlayBackgroundGradient),
         contentAlignment = Alignment.Center
     ) {
         AioPlayLoadingLabel(text)

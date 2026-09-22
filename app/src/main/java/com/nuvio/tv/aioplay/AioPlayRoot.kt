@@ -932,7 +932,13 @@ private fun AioPlaySectionCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(if (isFocused) Color.White else AioPlayAccentGradient, shape)
+                .then(
+                    if (isFocused) {
+                        Modifier.background(Color.White, shape)
+                    } else {
+                        Modifier.background(AioPlayAccentGradient, shape)
+                    }
+                )
                 .padding(if (isFocused) 3.dp else 2.dp)
                 .then(
                     if (selected) {
@@ -987,7 +993,13 @@ private fun AioPlayNavCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(if (isFocused) Color.White else AioPlayAccentGradient, shape)
+                .then(
+                    if (isFocused) {
+                        Modifier.background(Color.White, shape)
+                    } else {
+                        Modifier.background(AioPlayAccentGradient, shape)
+                    }
+                )
                 .padding(if (isFocused) 3.dp else 2.dp)
                 .then(
                     if (selected) {

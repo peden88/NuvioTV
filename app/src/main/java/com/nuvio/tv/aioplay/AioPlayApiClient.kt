@@ -66,6 +66,7 @@ class AioPlayApiClient @Inject constructor(
         val requestBuilder = Request.Builder()
             .url(requireBaseUrl() + path)
             .header("Accept", "application/json")
+            .header("X-AIOPlay-Client", "android-tv")
 
         if (!token.isNullOrBlank()) {
             requestBuilder.header("Authorization", "Bearer $token")

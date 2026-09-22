@@ -358,6 +358,20 @@ private fun AioPlaySignedInApp(
                                 "movie"
                             }
                             val resumeItem = viewModel.withSharedResume(item, contentType)
+
+                            // Continue Watching normally jumps straight into playback.
+                            // Put the matching details screen underneath it so Back/exit
+                            // has the same destination as playback launched from a catalog.
+                            val detailsItem = if (contentType == "episode") {
+                                item.copy(
+                                    id = item.parentId ?: item.id,
+                                    type = "series",
+                                    name = item.parentName ?: item.name
+                                )
+                            } else {
+                                item.copy(type = "movie")
+                            }
+                            navController.navigate(detailRoute(detailsItem))
                             navController.navigate(loadingRoute(resumeItem, contentType))
                         }
                     }

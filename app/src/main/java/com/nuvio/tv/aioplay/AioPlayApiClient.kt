@@ -11,6 +11,7 @@ import com.nuvio.tv.domain.model.MetaLink
 import com.nuvio.tv.domain.model.MetaTrailer
 import com.nuvio.tv.domain.model.PosterShape
 import com.nuvio.tv.domain.model.Video
+import com.nuvio.tv.domain.model.WatchProgress
 import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Named
@@ -123,6 +124,80 @@ class AioPlayApiClient @Inject constructor(
         val user = json.optJSONObject("user")
             ?: throw AioPlayApiException("The server returned no account.")
         return parseUser(user)
+    }
+
+    suspend fun progress(token: String): List<WatchProgress> {
+        val json = requestJson("/api/v1/progress", token = token)
+        val rows = json.optJSONArray("items") ?: return emptyList()
+        return buildList {
+            for (i in 0 until rows.length()) {
+                val row = rows.optJSONObject(i) ?: continue
+                val contentId = row.optString("contentId").trim()
+                val videoId = row.optString("videoId").trim().ifBlank { contentId }
+                val name = row.optString("name").trim()
+                if (contentId.isBlank() || videoId.isBlank() || name.isBlank()) continue
+
+                val position = row.optLong("position", 0L).coerceAtLeast(0L)
+                val duration = row.optLong("duration", 0L).coerceAtLeast(0L)
+                val explicitPercent = row.optNullableDouble("progressPercent")
+                    ?.toFloat()
+                    ?.coerceIn(0f, 100f)
+
+                add(
+                    WatchProgress(
+                        contentId = contentId,
+                        contentType = when (row.optString("contentType").trim().lowercase()) {
+                            "tv", "episode", "series" -> "series"
+                            else -> "movie"
+                        },
+                        name = name,
+                        poster = row.optNonBlankString("poster"),
+                        backdrop = row.optNonBlankString("backdrop"),
+                        logo = row.optNonBlankString("logo"),
+                        videoId = videoId,
+                        season = row.optNullableInt("season"),
+                        episode = row.optNullableInt("episode"),
+                        episodeTitle = row.optNonBlankString("episodeTitle"),
+                        position = position,
+                        duration = duration,
+                        lastWatched = row.optLong("lastWatched", 0L).coerceAtLeast(0L),
+                        progressPercent = explicitPercent,
+                        source = row.optNonBlankString("source") ?: "aioplay_shared"
+                    )
+                )
+            }
+        }
+    }
+
+    suspend fun pushProgress(token: String, progress: List<WatchProgress>) {
+        if (progress.isEmpty()) return
+        val rows = JSONArray()
+        progress.take(500).forEach { item ->
+            rows.put(
+                JSONObject()
+                    .put("contentId", item.contentId)
+                    .put("contentType", item.contentType)
+                    .put("name", item.name)
+                    .put("poster", item.poster ?: JSONObject.NULL)
+                    .put("backdrop", item.backdrop ?: JSONObject.NULL)
+                    .put("logo", item.logo ?: JSONObject.NULL)
+                    .put("videoId", item.videoId)
+                    .put("season", item.season ?: JSONObject.NULL)
+                    .put("episode", item.episode ?: JSONObject.NULL)
+                    .put("episodeTitle", item.episodeTitle ?: JSONObject.NULL)
+                    .put("position", item.position.coerceAtLeast(0L))
+                    .put("duration", item.duration.coerceAtLeast(0L))
+                    .put("lastWatched", item.lastWatched.coerceAtLeast(0L))
+                    .put("progressPercent", item.progressPercentage.coerceIn(0f, 1f) * 100f)
+                    .put("source", "aioplay_tv")
+            )
+        }
+        requestJson(
+            "/api/v1/progress",
+            method = "PUT",
+            token = token,
+            body = JSONObject().put("items", rows)
+        )
     }
 
     suspend fun logout(token: String) {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -23,7 +24,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -36,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -81,6 +85,7 @@ import com.nuvio.tv.ui.screens.settings.PlaybackSettingsScreen
 import com.nuvio.tv.ui.theme.NuvioTheme
 import java.net.URLEncoder
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 private const val HOME_ROUTE = "aioplay_home"
@@ -734,9 +739,9 @@ private fun AioPlayHomeScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(22.dp))
+                    .clip(RoundedCornerShape(18.dp))
                     .background(AioPlayGlass)
-                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .padding(horizontal = 6.dp, vertical = 5.dp)
             ) {
                 Row(
                     modifier = Modifier.align(Alignment.Center),
@@ -760,7 +765,7 @@ private fun AioPlayHomeScreen(
                     }
                     if (state.capabilities?.sportsEnabled == true) {
                         if (state.capabilities?.vodEnabled == true) {
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                         }
                         AioPlaySectionCard(
                             text = "Live",
@@ -777,7 +782,7 @@ private fun AioPlayHomeScreen(
                         )
                     }
                     if (state.capabilities?.vodEnabled == true) {
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         AioPlaySectionCard(
                             text = "Continue Watching",
                             selected = state.selectedSection == AioPlaySection.CONTINUE,
@@ -798,7 +803,7 @@ private fun AioPlayHomeScreen(
                     onClick = onSettings,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .width(52.dp)
+                        .width(42.dp)
                         .onFocusChanged {
                             if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
                         },
@@ -815,7 +820,7 @@ private fun AioPlayHomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             val title = state.catalogs
                 .firstOrNull { it.selectionKey == state.selectedCatalogId }
@@ -828,14 +833,24 @@ private fun AioPlayHomeScreen(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontSize = 17.sp,
+                        lineHeight = 20.sp
+                    ),
                     color = NuvioTheme.colors.TextPrimary,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+
+            val contentGridState = rememberLazyGridState()
+            val contentGridScope = rememberCoroutineScope()
+
+            LaunchedEffect(state.selectedSection, state.selectedCatalogId) {
+                contentGridState.scrollToItem(0)
+            }
 
             when {
                 state.loadingCatalog -> {
@@ -859,43 +874,58 @@ private fun AioPlayHomeScreen(
                 }
                 else -> {
                     val posterMode = state.selectedSection != AioPlaySection.LIVE
-                    LazyVerticalGrid(
-                        columns = if (posterMode) {
-                            GridCells.Fixed(5)
-                        } else {
-                            GridCells.Adaptive(minSize = 245.dp)
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            top = if (posterMode) 8.dp else 0.dp,
-                            bottom = if (posterMode) 24.dp else 30.dp
-                        ),
-                        horizontalArrangement = Arrangement.spacedBy(
-                            if (posterMode) 12.dp else 16.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(
-                            if (posterMode) 8.dp else 18.dp
-                        )
-                    ) {
-                        gridItems(state.items, key = { it.id }) { item ->
-                            AioPlayContentCard(
-                                item = item,
-                                posterMode = posterMode,
-                                onClick = { onItem(item) },
-                                modifier = Modifier
-                                    .then(
-                                        if (item.id == state.items.firstOrNull()?.id) {
-                                            Modifier.focusRequester(firstContentFocus)
-                                        } else {
-                                            Modifier
-                                        }
+                    val columnCount = if (posterMode) 6 else 3
+                    val pageSize = columnCount * 2
+
+                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        val rowSpacing = if (posterMode) 6.dp else 8.dp
+                        val rowHeight = (maxHeight - rowSpacing) / 2
+
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(columnCount),
+                            state = contentGridState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(0.dp),
+                            horizontalArrangement = Arrangement.spacedBy(
+                                if (posterMode) 9.dp else 10.dp
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(rowSpacing)
+                        ) {
+                            gridItemsIndexed(
+                                items = state.items,
+                                key = { _, item -> item.id }
+                            ) { index, item ->
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(rowHeight),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AioPlayContentCard(
+                                        item = item,
+                                        posterMode = posterMode,
+                                        liveCardHeight = if (posterMode) null else rowHeight - 8.dp,
+                                        onClick = { onItem(item) },
+                                        modifier = Modifier
+                                            .then(
+                                                if (item.id == state.items.firstOrNull()?.id) {
+                                                    Modifier.focusRequester(firstContentFocus)
+                                                } else {
+                                                    Modifier
+                                                }
+                                            )
+                                            .onFocusChanged {
+                                                if (it.isFocused) {
+                                                    focusZone = AioPlayHomeFocusZone.CONTENT
+                                                    val pageStart = (index / pageSize) * pageSize
+                                                    contentGridScope.launch {
+                                                        contentGridState.animateScrollToItem(pageStart)
+                                                    }
+                                                }
+                                            }
                                     )
-                                    .onFocusChanged {
-                                        if (it.isFocused) {
-                                            focusZone = AioPlayHomeFocusZone.CONTENT
-                                        }
-                                    }
-                            )
+                                }
+                            }
                         }
                     }
                 }
@@ -918,7 +948,7 @@ private fun AioPlaySectionCard(
     Card(
         onClick = onClick,
         modifier = modifier
-            .width(if (text == "Continue Watching") 196.dp else 132.dp)
+            .width(if (text == "Continue Watching") 157.dp else 106.dp)
             .onFocusChanged { isFocused = it.isFocused },
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
@@ -951,12 +981,15 @@ private fun AioPlaySectionCard(
                         Modifier.background(AioPlayPillIdle, innerShape)
                     }
                 )
-                .padding(vertical = 8.dp, horizontal = 18.dp),
+                .padding(vertical = 6.dp, horizontal = 14.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = text,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp
+                ),
                 color = Color.White,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1
@@ -1032,6 +1065,7 @@ private fun AioPlayNavCard(
 private fun AioPlayContentCard(
     item: AioPlayItem,
     posterMode: Boolean,
+    liveCardHeight: Dp? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1093,12 +1127,15 @@ private fun AioPlayContentCard(
             FocusMarqueeText(
                 text = item.name,
                 focused = isFocused,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp
+                ),
                 color = NuvioTheme.colors.TextPrimary,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        top = NuvioTheme.spacing.sm,
+                        top = 4.dp,
                         start = NuvioTheme.spacing.xxs,
                         end = NuvioTheme.spacing.xxs
                     )
@@ -1112,7 +1149,13 @@ private fun AioPlayContentCard(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(16f / 9f),
+            .then(
+                if (liveCardHeight != null) {
+                    Modifier.height(liveCardHeight)
+                } else {
+                    Modifier.aspectRatio(16f / 9f)
+                }
+            ),
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
             containerColor = NuvioTheme.colors.BackgroundCard,
@@ -1160,11 +1203,14 @@ private fun AioPlayContentCard(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .padding(14.dp)
+                    .padding(9.dp)
             ) {
                 Text(
                     text = item.name,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 11.sp,
+                        lineHeight = 13.sp
+                    ),
                     color = Color.White,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
@@ -1173,7 +1219,10 @@ private fun AioPlayContentCard(
                 if (!item.description.isNullOrBlank()) {
                     Text(
                         text = item.description.lineSequence().firstOrNull().orEmpty(),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 9.sp,
+                            lineHeight = 11.sp
+                        ),
                         color = Color.White.copy(alpha = 0.76f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis

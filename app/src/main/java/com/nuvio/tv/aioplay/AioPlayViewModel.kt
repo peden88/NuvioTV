@@ -4,12 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.data.local.AioPlaySessionStore
 import com.nuvio.tv.data.local.PlayerSettingsDataStore
+import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -48,6 +50,8 @@ class AioPlayViewModel @Inject constructor(
     private var liveCatalogs: List<AioPlayCatalog> = emptyList()
     private var vodCatalogs: List<AioPlayCatalog> = emptyList()
     private var continueWatchingItems: List<AioPlayItem> = emptyList()
+    private var localProgressByKey: Map<String, WatchProgress> = emptyMap()
+    private val pushedProgressFingerprints = mutableMapOf<String, String>()
 
     private val continueWatchingCatalog = AioPlayCatalog(
         id = "continue_watching",
@@ -63,7 +67,10 @@ class AioPlayViewModel @Inject constructor(
         viewModelScope.launch {
             watchProgressRepository.continueWatching.collectLatest { rows ->
                 continueWatchingItems = rows.map { progress ->
-                    val isSeries = progress.contentType.equals("series", ignoreCase = true)
+                    val isSeries =
+                        progress.contentType.equals("series", ignoreCase = true) ||
+                            progress.contentType.equals("tv", ignoreCase = true) ||
+                            progress.contentType.equals("episode", ignoreCase = true)
                     val episodeLabel = if (
                         isSeries && progress.season != null && progress.episode != null
                     ) {
@@ -80,7 +87,12 @@ class AioPlayViewModel @Inject constructor(
                         description = episodeLabel,
                         poster = progress.poster,
                         background = progress.backdrop,
-                        logo = progress.logo
+                        logo = progress.logo,
+                        parentId = if (isSeries) progress.contentId else null,
+                        parentName = if (isSeries) progress.name else null,
+                        season = progress.season,
+                        episode = progress.episode,
+                        episodeTitle = progress.episodeTitle
                     )
                 }
 
@@ -92,6 +104,89 @@ class AioPlayViewModel @Inject constructor(
                     )
                 }
             }
+        }
+        viewModelScope.launch {
+            watchProgressRepository.allProgress.collect { rows ->
+                localProgressByKey = rows.associateBy(::progressKey)
+                val activeToken = token ?: return@collect
+                val changed = rows
+                    .sortedByDescending { it.lastWatched }
+                    .take(250)
+                    .filter { progress ->
+                        pushedProgressFingerprints[progressKey(progress)] != progressFingerprint(progress)
+                    }
+                if (changed.isEmpty()) return@collect
+
+                runCatching { api.pushProgress(activeToken, changed) }
+                    .onSuccess {
+                        changed.forEach { progress ->
+                            pushedProgressFingerprints[progressKey(progress)] = progressFingerprint(progress)
+                        }
+                    }
+            }
+        }
+    }
+
+    private fun progressKey(progress: WatchProgress): String = buildString {
+        val isSeries =
+            progress.contentType.equals("series", ignoreCase = true) ||
+                progress.contentType.equals("tv", ignoreCase = true) ||
+                progress.contentType.equals("episode", ignoreCase = true)
+        append(if (isSeries) "series" else "movie")
+        append('|')
+        append(progress.contentId)
+        if (isSeries) {
+            append('|')
+            append(progress.season ?: "")
+            append('|')
+            append(progress.episode ?: "")
+            append('|')
+            append(progress.videoId)
+        }
+    }
+
+    private fun progressFingerprint(progress: WatchProgress): String =
+        listOf(
+            progress.position,
+            progress.duration,
+            progress.lastWatched,
+            progress.progressPercent ?: -1f
+        ).joinToString("|")
+
+    private suspend fun pullSharedProgress(activeToken: String) {
+        val remote = api.progress(activeToken)
+        if (remote.isEmpty()) return
+
+        val local = if (localProgressByKey.isNotEmpty()) {
+            localProgressByKey
+        } else {
+            watchProgressRepository.allProgress.first().associateBy(::progressKey)
+        }
+
+        remote.forEach { incoming ->
+            val current = local[progressKey(incoming)]
+            if (current == null || incoming.lastWatched > current.lastWatched) {
+                watchProgressRepository.saveProgress(incoming, syncRemote = false)
+            }
+        }
+    }
+
+    private suspend fun syncSharedProgress(activeToken: String) {
+        val local = watchProgressRepository.allProgress.first()
+        localProgressByKey = local.associateBy(::progressKey)
+
+        runCatching { pullSharedProgress(activeToken) }
+
+        val newestLocal = watchProgressRepository.allProgress.first()
+            .sortedByDescending { it.lastWatched }
+            .take(250)
+        if (newestLocal.isNotEmpty()) {
+            runCatching { api.pushProgress(activeToken, newestLocal) }
+                .onSuccess {
+                    newestLocal.forEach { progress ->
+                        pushedProgressFingerprints[progressKey(progress)] = progressFingerprint(progress)
+                    }
+                }
         }
     }
 
@@ -150,6 +245,7 @@ class AioPlayViewModel @Inject constructor(
     private suspend fun enterSignedInState(user: AioPlayUser) {
         val activeToken = token ?: return
         val capabilities = api.capabilities(activeToken)
+        runCatching { syncSharedProgress(activeToken) }
 
         liveCatalogs = if (capabilities.sportsEnabled) {
             api.catalogs(activeToken)
@@ -210,6 +306,7 @@ class AioPlayViewModel @Inject constructor(
             }
 
             if (section == AioPlaySection.CONTINUE) {
+                token?.let { activeToken -> runCatching { pullSharedProgress(activeToken) } }
                 _state.value = _state.value.copy(
                     selectedSection = section,
                     catalogs = catalogs,
@@ -245,7 +342,10 @@ class AioPlayViewModel @Inject constructor(
 
     fun refreshCurrentCatalog() {
         if (_state.value.selectedSection == AioPlaySection.CONTINUE) {
-            _state.value = _state.value.copy(items = continueWatchingItems, error = null)
+            viewModelScope.launch {
+                token?.let { activeToken -> runCatching { pullSharedProgress(activeToken) } }
+                _state.value = _state.value.copy(items = continueWatchingItems, error = null)
+            }
             return
         }
         val selected = _state.value.catalogs.firstOrNull {
@@ -311,6 +411,9 @@ class AioPlayViewModel @Inject constructor(
             token = null
             liveCatalogs = emptyList()
             vodCatalogs = emptyList()
+            continueWatchingItems = emptyList()
+            localProgressByKey = emptyMap()
+            pushedProgressFingerprints.clear()
             if (!oldToken.isNullOrBlank()) {
                 runCatching { api.logout(oldToken) }
             }

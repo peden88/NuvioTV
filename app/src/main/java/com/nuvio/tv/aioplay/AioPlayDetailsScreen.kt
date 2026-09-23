@@ -129,6 +129,24 @@ internal fun AioPlayDetailsScreen(
                 onToggleWatched = {
                     val item = details!!.item
                     viewModel.setWatched(item, !viewModel.isWatched(item))
+                },
+                isEpisodeWatched = { season, episode -> viewModel.isEpisodeWatched(details!!.item.id, season, episode) },
+                onToggleEpisodeWatched = { video ->
+                    val episodeItem = AioPlayItem(
+                        id = video.id,
+                        type = "episode",
+                        name = video.title ?: "Episode",
+                        description = null,
+                        poster = null,
+                        background = null,
+                        logo = null,
+                        parentId = details!!.item.id,
+                        parentName = details!!.item.name,
+                        season = video.season,
+                        episode = video.episode,
+                        episodeTitle = video.title
+                    )
+                    viewModel.setWatched(episodeItem, !viewModel.isEpisodeWatched(details!!.item.id, video.season, video.episode))
                 }
             )
         }
@@ -146,7 +164,9 @@ private fun AioPlayRichDetails(
     isInLibrary: Boolean,
     onToggleLibrary: () -> Unit,
     isWatched: Boolean,
-    onToggleWatched: () -> Unit
+    onToggleWatched: () -> Unit,
+    isEpisodeWatched: (Int?, Int?) -> Boolean,
+    onToggleEpisodeWatched: (Video) -> Unit
 ) {
     val meta = details.meta
     val isSeries = meta.apiType.equals("series", ignoreCase = true) ||
@@ -290,9 +310,14 @@ private fun AioPlayRichDetails(
                 item(key = "episodes-$selectedSeason") {
                     EpisodesRow(
                         episodes = selectedEpisodes,
+                        watchedEpisodes = selectedEpisodes.mapNotNull { video ->
+                            val season = video.season
+                            val episode = video.episode
+                            if (season != null && episode != null && isEpisodeWatched(season, episode)) season to episode else null
+                        }.toSet(),
                         onEpisodeClick = ::playVideo,
-                        onToggleEpisodeWatched = {},
-                        showEpisodeOptions = false,
+                        onToggleEpisodeWatched = onToggleEpisodeWatched,
+                        showEpisodeOptions = true,
                         selectedSeason = selectedSeason,
                         upFocusRequester = if (seasons.isNotEmpty()) seasonFocus else heroFocus,
                         episodeFocusRequesters = episodeFocusRequesters,

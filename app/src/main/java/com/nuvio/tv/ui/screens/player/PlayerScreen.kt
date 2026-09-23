@@ -51,6 +51,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -2875,6 +2877,8 @@ private fun ControlButton(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = (-30).dp)
+                .wrapContentSize(unbounded = true)
+                .widthIn(max = 150.dp)
                 .zIndex(4f)
         ) {
             Text(

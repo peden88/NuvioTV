@@ -59,6 +59,15 @@ class AioPlayViewModel @Inject constructor(
         ): Boolean = size > 48
     }
     private val vodMetaPrefetching = mutableSetOf<String>()
+    private data class CachedSearch(
+        val storedAtMs: Long,
+        val items: List<AioPlayItem>
+    )
+    private val searchCache = object : LinkedHashMap<String, CachedSearch>(24, 0.75f, true) {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<String, CachedSearch>?
+        ): Boolean = size > 24
+    }
 
     private val continueWatchingCatalog = AioPlayCatalog(
         id = "continue_watching",
@@ -478,15 +487,32 @@ class AioPlayViewModel @Inject constructor(
         val activeToken = token ?: return Result.failure(
             AioPlayApiException("Your session has expired.", 403)
         )
+        val cleanQuery = query.trim()
         val normalizedType = type
             ?.lowercase()
             ?.takeIf { it == "movie" || it == "series" }
+        val cacheKey = cleanQuery.lowercase() + "|" + normalizedType.orEmpty()
+        val now = System.currentTimeMillis()
+
+        synchronized(searchCache) {
+            searchCache[cacheKey]
+                ?.takeIf { now - it.storedAtMs < 5 * 60 * 1000L }
+                ?.let { return Result.success(it.items) }
+        }
+
         return runCatching {
             api.searchVod(
                 token = activeToken,
-                query = query,
+                query = cleanQuery,
                 type = normalizedType
             )
+        }.onSuccess { items ->
+            synchronized(searchCache) {
+                searchCache[cacheKey] = CachedSearch(
+                    storedAtMs = System.currentTimeMillis(),
+                    items = items
+                )
+            }
         }
     }
 
@@ -654,6 +680,9 @@ class AioPlayViewModel @Inject constructor(
             synchronized(vodMetaCache) {
                 vodMetaCache.clear()
                 vodMetaPrefetching.clear()
+            }
+            synchronized(searchCache) {
+                searchCache.clear()
             }
             if (!oldToken.isNullOrBlank()) {
                 runCatching { api.logout(oldToken) }

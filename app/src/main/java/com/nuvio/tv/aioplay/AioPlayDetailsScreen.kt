@@ -1,6 +1,10 @@
 package com.nuvio.tv.aioplay
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,7 +54,26 @@ internal fun AioPlayDetailsScreen(
     restoreEpisodeFocusToken: Int = 0,
     restoreHeroFocusToken: Int = 0
 ) {
-    BackHandler(onBack = onBack)
+    var visible by remember(preview.id) { mutableStateOf(false) }
+    var dismissing by remember(preview.id) { mutableStateOf(false) }
+
+    LaunchedEffect(preview.id) { visible = true }
+
+    fun dismiss() {
+        if (!dismissing) {
+            dismissing = true
+            visible = false
+        }
+    }
+
+    BackHandler(onBack = ::dismiss)
+
+    LaunchedEffect(visible, dismissing) {
+        if (dismissing && !visible) {
+            kotlinx.coroutines.delay(1_000)
+            onBack()
+        }
+    }
 
     val contentType = remember(preview.type) {
         if (preview.type.equals("series", ignoreCase = true) ||
@@ -78,21 +101,27 @@ internal fun AioPlayDetailsScreen(
         loading = false
     }
 
-    when {
-        loading && details == null -> AioPlayDetailsStatus("Loading title details…")
-        error != null && details == null -> AioPlayDetailsError(
-            message = error.orEmpty(),
-            onRetry = { retryKey++ },
-            onBack = onBack
-        )
-        details != null -> AioPlayRichDetails(
-            details = details!!,
-            onPlay = onPlay,
-            restoreEpisodeId = restoreEpisodeId,
-            restoreEpisodeSeason = restoreEpisodeSeason,
-            restoreEpisodeFocusToken = restoreEpisodeFocusToken,
-            restoreHeroFocusToken = restoreHeroFocusToken
-        )
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(animationSpec = tween(durationMillis = 180)),
+        exit = fadeOut(animationSpec = tween(durationMillis = 1_000))
+    ) {
+        when {
+            loading && details == null -> AioPlayDetailsStatus("Loading title details…")
+            error != null && details == null -> AioPlayDetailsError(
+                message = error.orEmpty(),
+                onRetry = { retryKey++ },
+                onBack = ::dismiss
+            )
+            details != null -> AioPlayRichDetails(
+                details = details!!,
+                onPlay = onPlay,
+                restoreEpisodeId = restoreEpisodeId,
+                restoreEpisodeSeason = restoreEpisodeSeason,
+                restoreEpisodeFocusToken = restoreEpisodeFocusToken,
+                restoreHeroFocusToken = restoreHeroFocusToken
+            )
+        }
     }
 }
 

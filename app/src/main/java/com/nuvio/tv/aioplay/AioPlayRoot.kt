@@ -1431,6 +1431,7 @@ private fun AioPlayHomeScreen(
                     "live" -> liveFocus
                     "vod" -> vodFocus
                     "continue" -> continueFocus
+                    "library" -> libraryFocus
                     else -> selectedTopRequester()
                 }
                 runCatching { requester.requestFocus() }
@@ -1820,8 +1821,10 @@ private fun AioPlayHomeScreen(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 LaunchedEffect(state.selectedSection, state.selectedCatalogId) {
-                    contentWindowStartRow = 0
-                    pendingContentFocusId = null
+                    if (restoreContentFocusToken <= 0 || restoreContentItemId.isNullOrBlank()) {
+                        contentWindowStartRow = 0
+                        pendingContentFocusId = null
+                    }
                 }
 
                 LaunchedEffect(contentWindowStartRow, pendingContentFocusId) {

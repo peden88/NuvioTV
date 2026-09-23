@@ -778,6 +778,8 @@ class AioPlayViewModel @Inject constructor(
             liveCatalogs = emptyList()
             vodCatalogs = emptyList()
             continueWatchingItems = emptyList()
+            libraryItems = emptyList()
+            watchedItems = emptyList()
             localProgressByKey = emptyMap()
             sharedProgressByKey.clear()
             pushedProgressFingerprints.clear()

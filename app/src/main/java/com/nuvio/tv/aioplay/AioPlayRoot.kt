@@ -854,6 +854,11 @@ private fun AioPlayHomeScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(AioPlayContentDim)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
                 .background(AioPlayHeroSideGradient)
         )
         Box(

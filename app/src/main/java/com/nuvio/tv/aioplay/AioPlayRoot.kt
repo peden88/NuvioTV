@@ -796,6 +796,25 @@ private fun AioPlaySignedInApp(
                         }
                     }
                 },
+                onRequestAlternateSource = if (sessionId.isNotBlank()) {
+                    {
+                        navController.navigate(
+                            loadingRoute(
+                                item = item,
+                                contentType = fallbackContentType,
+                                sessionId = sessionId
+                            )
+                        ) {
+                            if (fallbackContentType == "movie" || fallbackContentType == "episode") {
+                                popUpTo(DETAIL_ROUTE) { inclusive = false }
+                            } else {
+                                popUpTo(HOME_ROUTE) { inclusive = false }
+                            }
+                        }
+                    }
+                } else {
+                    null
+                },
                 onPlaybackEnded = { nextVideoId, nextSeason, nextEpisode, exitReason ->
                     val hasNextEpisode = fallbackContentType == "episode" &&
                         exitReason == null &&

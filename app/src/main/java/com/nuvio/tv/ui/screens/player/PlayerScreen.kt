@@ -2128,6 +2128,13 @@ private fun PlayerControlsOverlay(
     val letterboxActive = bandDp != null && bandDp >= 64.dp &&
         uiState.resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT
     var belowBarHeightPx by remember { mutableStateOf(0) }
+    val hudTimeline by viewModel.playbackTimeline.collectAsState()
+    val hudRemainingMs = (hudTimeline.duration - hudTimeline.currentPosition)
+        .coerceAtLeast(0L)
+    val showAioPlayNextUp = BuildConfig.AIOPLAY_MODE &&
+        hudTimeline.duration > 0L &&
+        hudRemainingMs in 1L..(5L * 60L * 1000L) &&
+        uiState.nextEpisode?.hasAired == true
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Top gradient
@@ -2162,10 +2169,28 @@ private fun PlayerControlsOverlay(
                     if (bytes >= 1_073_741_824L) "%.1f GB".format(bytes / 1_073_741_824.0)
                     else "%.0f MB".format(bytes / 1_048_576.0)
                 }
+                val videoCodecChip = info.videoCodec
+                    ?.takeIf { it.isNotBlank() }
+                    ?.uppercase(Locale.US)
+                val frameRateChip = info.videoFrameRate
+                    ?.takeIf { it > 0f }
+                    ?.let { rate ->
+                        val rounded = kotlin.math.round(rate)
+                        if (kotlin.math.abs(rate - rounded) < 0.05f) {
+                            rounded.toInt().toString() + " FPS"
+                        } else {
+                            String.format(Locale.US, "%.2f FPS", rate)
+                        }
+                    }
                 val audioChip = info.audioCodec?.let { codec ->
                     info.audioChannels?.let { ch -> "$codec $ch" } ?: codec
                 }
-                listOfNotNull(resChip, sizeChip, audioChip).forEach { label ->
+                val chipLabels = if (BuildConfig.AIOPLAY_MODE) {
+                    listOfNotNull(resChip, videoCodecChip, frameRateChip, audioChip)
+                } else {
+                    listOfNotNull(resChip, sizeChip, audioChip)
+                }
+                chipLabels.forEach { label ->
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(999.dp))
@@ -2292,6 +2317,40 @@ private fun PlayerControlsOverlay(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                    } else if (
+                        BuildConfig.AIOPLAY_MODE &&
+                        !uiState.releaseYear.isNullOrBlank()
+                    ) {
+                        Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
+                        Text(
+                            text = uiState.releaseYear.orEmpty(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.72f),
+                            maxLines = 1
+                        )
+                    }
+
+                    if (showAioPlayNextUp) {
+                        uiState.nextEpisode?.let { next ->
+                            Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.Black.copy(alpha = 0.42f))
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = "NEXT  ·  S" +
+                                        next.season.toString().padStart(2, '0') +
+                                        "E" + next.episode.toString().padStart(2, '0') +
+                                        "  ·  " + next.title,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White.copy(alpha = 0.86f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -2342,6 +2401,16 @@ private fun PlayerControlsOverlay(
                                 icon = Icons.Default.Cloud,
                                 contentDescription = stringResource(R.string.cd_sources),
                                 onClick = onShowSourcesPanel,
+                                downFocusRequester = progressBarFocusRequester,
+                                onUpKey = onHideControls,
+                                onFocused = onResetHideTimer
+                            )
+                        } else if (onRequestAlternateSource != null) {
+                            ControlButton(
+                                icon = Icons.Default.Cloud,
+                                iconPainter = customSourcePainter,
+                                contentDescription = "Switch source",
+                                onClick = onRequestAlternateSource,
                                 downFocusRequester = progressBarFocusRequester,
                                 onUpKey = onHideControls,
                                 onFocused = onResetHideTimer

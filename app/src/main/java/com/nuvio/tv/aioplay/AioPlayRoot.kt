@@ -1291,6 +1291,7 @@ private fun AioPlayHomeScreen(
     var focusedNavKey by remember { mutableStateOf<String?>(null) }
     var focusedContentId by remember { mutableStateOf<String?>(null) }
     var rapidNavigation by remember { mutableStateOf(false) }
+    var contextItem by remember { mutableStateOf<AioPlayItem?>(null) }
     var rapidNavigationEpoch by remember { mutableIntStateOf(0) }
 
     var pendingHeroItem by remember(
@@ -1925,6 +1926,14 @@ private fun AioPlayHomeScreen(
                                                                     return@onPreviewKeyEvent false
                                                                 }
                                                                 noteRapidNavigation(native)
+                                                                if (
+                                                                    state.selectedSection != AioPlaySection.LIVE &&
+                                                                    native.repeatCount == 1 &&
+                                                                    native.keyCode in setOf(AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER)
+                                                                ) {
+                                                                    contextItem = item
+                                                                    return@onPreviewKeyEvent true
+                                                                }
 
                                                                 val direction = when (native.keyCode) {
                                                                     AndroidKeyEvent.KEYCODE_DPAD_DOWN -> 1
@@ -1978,6 +1987,28 @@ private fun AioPlayHomeScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        contextItem?.let { item ->
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.62f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier.width(360.dp),
+                    shape = androidx.tv.material3.MaterialTheme.shapes.medium,
+                    colors = SurfaceDefaults.colors(containerColor = NuvioTheme.colors.BackgroundCard)
+                ) {
+                    Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(item.name, style = MaterialTheme.typography.titleLarge, color = NuvioTheme.colors.TextPrimary, maxLines = 2)
+                        Text("Title actions", style = MaterialTheme.typography.bodySmall, color = NuvioTheme.colors.TextSecondary)
+                        Button(onClick = { contextItem = null; onItem(item) }, modifier = Modifier.fillMaxWidth()) { Text(if ((item.resumePositionMs ?: 0L) > 0L) "Resume / Details" else "Play / Details") }
+                        Button(onClick = { onToggleLibrary(item); contextItem = null; pendingContentFocusId = item.id }, modifier = Modifier.fillMaxWidth()) { Text(if (isInLibrary(item)) "Remove from Library" else "Add to Library") }
+                        Button(onClick = { onToggleWatched(item); contextItem = null; pendingContentFocusId = item.id }, modifier = Modifier.fillMaxWidth()) { Text(if (isWatched(item)) "Mark Unwatched" else "Mark Watched") }
+                        Button(onClick = { contextItem = null; pendingContentFocusId = item.id }, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
                     }
                 }
             }

@@ -53,6 +53,12 @@ class AioPlayViewModel @Inject constructor(
     private var localProgressByKey: Map<String, WatchProgress> = emptyMap()
     private val sharedProgressByKey = mutableMapOf<String, WatchProgress>()
     private val pushedProgressFingerprints = mutableMapOf<String, String>()
+    private val vodMetaCache = object : LinkedHashMap<String, AioPlayMetaDetails>(48, 0.75f, true) {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<String, AioPlayMetaDetails>?
+        ): Boolean = size > 48
+    }
+    private val vodMetaPrefetching = mutableSetOf<String>()
 
     private val continueWatchingCatalog = AioPlayCatalog(
         id = "continue_watching",
@@ -462,11 +468,116 @@ class AioPlayViewModel @Inject constructor(
             }
     }
 
+    private fun vodMetaKey(type: String, id: String): String =
+        type.lowercase() + "|" + id
+
     suspend fun loadVodMeta(type: String, id: String): Result<AioPlayMetaDetails> {
+        val normalizedType = when (type.lowercase()) {
+            "tv", "episode" -> "series"
+            else -> type.lowercase()
+        }
+        val key = vodMetaKey(normalizedType, id)
+        synchronized(vodMetaCache) {
+            vodMetaCache[key]
+        }?.let { return Result.success(it) }
+
         val activeToken = token ?: return Result.failure(
             AioPlayApiException("Your session has expired.", 403)
         )
-        return runCatching { api.vodMeta(activeToken, type, id) }
+        return runCatching { api.vodMeta(activeToken, normalizedType, id) }
+            .onSuccess { details ->
+                synchronized(vodMetaCache) {
+                    vodMetaCache[key] = details
+                }
+            }
+    }
+
+    fun prefetchVodMeta(item: AioPlayItem) {
+        val type: String
+        val id: String
+        when (item.type.lowercase()) {
+            "episode" -> {
+                type = "series"
+                id = item.parentId ?: return
+            }
+            "series", "tv" -> {
+                type = "series"
+                id = item.id
+            }
+            "movie" -> {
+                type = "movie"
+                id = item.id
+            }
+            else -> return
+        }
+
+        val key = vodMetaKey(type, id)
+        synchronized(vodMetaCache) {
+            if (vodMetaCache.containsKey(key) || key in vodMetaPrefetching) return
+            vodMetaPrefetching += key
+        }
+
+        viewModelScope.launch {
+            try {
+                loadVodMeta(type, id)
+            } finally {
+                synchronized(vodMetaCache) {
+                    vodMetaPrefetching -= key
+                }
+            }
+        }
+    }
+
+    suspend fun resolveNextEpisode(
+        current: AioPlayItem,
+        nextVideoId: String?,
+        nextSeason: Int?,
+        nextEpisode: Int?
+    ): AioPlayItem? {
+        val seriesId = current.parentId ?: return null
+        val details = loadVodMeta("series", seriesId).getOrNull() ?: return null
+        val ordered = details.videos.sortedWith(
+            compareBy<AioPlayVideo>(
+                { it.season ?: Int.MAX_VALUE },
+                { it.episode ?: Int.MAX_VALUE }
+            )
+        )
+
+        val target = when {
+            !nextVideoId.isNullOrBlank() ->
+                ordered.firstOrNull { it.id == nextVideoId }
+            nextSeason != null && nextEpisode != null ->
+                ordered.firstOrNull {
+                    it.season == nextSeason && it.episode == nextEpisode
+                }
+            else -> {
+                val currentIndex = ordered.indexOfFirst { video ->
+                    video.id == current.id ||
+                        (
+                            current.season != null &&
+                            current.episode != null &&
+                            video.season == current.season &&
+                            video.episode == current.episode
+                        )
+                }
+                ordered.getOrNull(currentIndex + 1)
+            }
+        } ?: return null
+
+        return AioPlayItem(
+            id = target.id,
+            type = "episode",
+            name = target.title,
+            description = target.overview,
+            poster = details.item.poster,
+            background = details.item.background,
+            logo = details.item.logo,
+            parentId = details.item.id,
+            parentName = details.item.name,
+            season = target.season,
+            episode = target.episode,
+            episodeTitle = target.title
+        )
     }
 
     fun signOut() {
@@ -479,6 +590,10 @@ class AioPlayViewModel @Inject constructor(
             localProgressByKey = emptyMap()
             sharedProgressByKey.clear()
             pushedProgressFingerprints.clear()
+            synchronized(vodMetaCache) {
+                vodMetaCache.clear()
+                vodMetaPrefetching.clear()
+            }
             if (!oldToken.isNullOrBlank()) {
                 runCatching { api.logout(oldToken) }
             }

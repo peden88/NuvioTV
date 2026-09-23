@@ -2379,6 +2379,7 @@ private fun PlayerControlsOverlay(
                         if (hasAudioControl) {
                         ControlButton(
                             icon = Icons.Default.Speaker,
+                            iconPainter = if (BuildConfig.AIOPLAY_MODE) customAudioPainter else null,
                             contentDescription = stringResource(R.string.cd_audio_tracks),
                             onClick = onShowAudioDialog,
                             downFocusRequester = progressBarFocusRequester,
@@ -2389,6 +2390,7 @@ private fun PlayerControlsOverlay(
                         if (hasSubtitleControl) {
                         ControlButton(
                             icon = Icons.Default.Chat,
+                            iconPainter = if (BuildConfig.AIOPLAY_MODE) customSubtitlePainter else null,
                             contentDescription = stringResource(R.string.cd_subtitles),
                             onClick = onShowSubtitleDialog,
                             downFocusRequester = progressBarFocusRequester,
@@ -2827,7 +2829,11 @@ private fun ControlButton(
             },
         colors = IconButtonDefaults.colors(
             containerColor = Color.Transparent,
-            focusedContainerColor = Color.White,
+            focusedContainerColor = if (BuildConfig.AIOPLAY_MODE) {
+                Color(0xFFD7DEE1)
+            } else {
+                Color.White
+            },
             contentColor = Color.White,
             focusedContentColor = Color.Black
         ),

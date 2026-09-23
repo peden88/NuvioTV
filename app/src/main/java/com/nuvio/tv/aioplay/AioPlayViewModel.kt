@@ -535,7 +535,29 @@ class AioPlayViewModel @Inject constructor(
         nextEpisode: Int?
     ): AioPlayItem? {
         val seriesId = current.parentId ?: return null
-        val details = loadVodMeta("series", seriesId).getOrNull() ?: return null
+        val details = loadVodMeta("series", seriesId).getOrNull()
+
+        if (details == null) {
+            val fallbackId = nextVideoId?.takeIf { it.isNotBlank() } ?: return null
+            val code = if (nextSeason != null && nextEpisode != null) {
+                "S" + nextSeason.toString().padStart(2, '0') +
+                    "E" + nextEpisode.toString().padStart(2, '0')
+            } else {
+                "Next episode"
+            }
+            return current.copy(
+                id = fallbackId,
+                type = "episode",
+                name = code,
+                description = null,
+                season = nextSeason,
+                episode = nextEpisode,
+                episodeTitle = null,
+                resumePositionMs = null,
+                resumeDurationMs = null
+            )
+        }
+
         val ordered = details.videos.sortedWith(
             compareBy<AioPlayVideo>(
                 { it.season ?: Int.MAX_VALUE },
@@ -562,7 +584,27 @@ class AioPlayViewModel @Inject constructor(
                 }
                 ordered.getOrNull(currentIndex + 1)
             }
-        } ?: return null
+        }
+
+        if (target == null) {
+            val fallbackId = nextVideoId?.takeIf { it.isNotBlank() } ?: return null
+            return current.copy(
+                id = fallbackId,
+                type = "episode",
+                name = if (nextSeason != null && nextEpisode != null) {
+                    "S" + nextSeason.toString().padStart(2, '0') +
+                        "E" + nextEpisode.toString().padStart(2, '0')
+                } else {
+                    "Next episode"
+                },
+                description = null,
+                season = nextSeason,
+                episode = nextEpisode,
+                episodeTitle = null,
+                resumePositionMs = null,
+                resumeDurationMs = null
+            )
+        }
 
         return AioPlayItem(
             id = target.id,

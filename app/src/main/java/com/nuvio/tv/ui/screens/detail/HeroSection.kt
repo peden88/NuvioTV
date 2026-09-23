@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,6 +61,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import android.util.Log
 import com.nuvio.tv.R
 import com.nuvio.tv.domain.model.ContentType
@@ -112,6 +114,7 @@ fun HeroContentSection(
     showFullReleaseDate: Boolean = true,
     isTrailerPlaying: Boolean = false,
     playButtonFocusRequester: FocusRequester? = null,
+    playArtworkRes: Int? = null,
     restorePlayFocusToken: Int = 0,
     onHeroActionFocused: () -> Unit = {},
     onPlayFocusRestored: () -> Unit = {},
@@ -249,6 +252,7 @@ fun HeroContentSection(
                             onClick = onPlayClick,
                             onLongPress = onPlayLongPress,
                             focusRequester = playButtonFocusRequester,
+                            artworkRes = playArtworkRes,
                             restoreFocusToken = restorePlayFocusToken,
                             onFocusRestored = {
                                 onHeroActionFocused()
@@ -384,6 +388,7 @@ private fun PlayButton(
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
+    artworkRes: Int? = null,
     restoreFocusToken: Int = 0,
     onFocusRestored: () -> Unit = {}
 ) {
@@ -400,6 +405,38 @@ private fun PlayButton(
         context = context,
         rawRes = com.nuvio.tv.R.raw.ic_player_play
     )
+
+    if (artworkRes != null) {
+        Button(
+            onClick = onClick,
+            modifier = Modifier
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .size(70.dp)
+                .onFocusChanged { if (it.isFocused) onFocusRestored() }
+                .focusProperties { up = FocusRequester.Cancel },
+            colors = ButtonDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                contentColor = Color.White,
+                focusedContentColor = Color.White
+            ),
+            shape = ButtonDefaults.shape(shape = CircleShape),
+            border = ButtonDefaults.border(
+                focusedBorder = Border(
+                    border = NuvioTheme.focusRing.border(NuvioTheme.spacing.xxs),
+                    shape = CircleShape
+                )
+            ),
+            contentPadding = PaddingValues(0.dp)
+        ) {
+            Image(
+                painter = painterResource(artworkRes),
+                contentDescription = "Play",
+                modifier = Modifier.size(70.dp)
+            )
+        }
+        return
+    }
 
     Button(
         onClick = {

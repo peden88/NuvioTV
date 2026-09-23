@@ -51,6 +51,7 @@ class AioPlayViewModel @Inject constructor(
     private var liveCatalogs: List<AioPlayCatalog> = emptyList()
     private var vodCatalogs: List<AioPlayCatalog> = emptyList()
     private var continueWatchingItems: List<AioPlayItem> = emptyList()
+    private var libraryItems: List<AioPlayItem> = emptyList()
     private var localProgressByKey: Map<String, WatchProgress> = emptyMap()
     private val sharedProgressByKey = mutableMapOf<String, WatchProgress>()
     private val pushedProgressFingerprints = mutableMapOf<String, String>()
@@ -408,13 +409,17 @@ class AioPlayViewModel @Inject constructor(
             }
 
             if (section == AioPlaySection.LIBRARY) {
+                val activeToken = token
+                if (activeToken != null) {
+                    runCatching { api.library(activeToken) }.onSuccess { libraryItems = it }
+                }
                 _state.value = _state.value.copy(
                     selectedSection = section,
                     catalogs = catalogs,
                     selectedCatalogId = preferred?.selectionKey,
-                    items = emptyList(),
+                    items = libraryItems,
                     loadingCatalog = false,
-                    error = "Your library is empty."
+                    error = if (libraryItems.isEmpty()) "Your library is empty." else null
                 )
                 return@launch
             }
@@ -433,6 +438,42 @@ class AioPlayViewModel @Inject constructor(
             )
 
             if (preferred != null) loadCatalogInternal(preferred)
+        }
+    }
+
+    fun isInLibrary(item: AioPlayItem): Boolean =
+        libraryItems.any { it.id == item.id && it.type.equals(item.type, ignoreCase = true) }
+
+    fun addToLibrary(item: AioPlayItem) {
+        val activeToken = token ?: return
+        viewModelScope.launch {
+            runCatching { api.addToLibrary(activeToken, item) }
+                .onSuccess { saved ->
+                    libraryItems = listOf(saved) + libraryItems.filterNot {
+                        it.id == saved.id && it.type.equals(saved.type, ignoreCase = true)
+                    }
+                    if (_state.value.selectedSection == AioPlaySection.LIBRARY) {
+                        _state.value = _state.value.copy(items = libraryItems, error = null)
+                    }
+                }
+        }
+    }
+
+    fun removeFromLibrary(item: AioPlayItem) {
+        val activeToken = token ?: return
+        viewModelScope.launch {
+            runCatching { api.removeFromLibrary(activeToken, item) }
+                .onSuccess {
+                    libraryItems = libraryItems.filterNot {
+                        it.id == item.id && it.type.equals(item.type, ignoreCase = true)
+                    }
+                    if (_state.value.selectedSection == AioPlaySection.LIBRARY) {
+                        _state.value = _state.value.copy(
+                            items = libraryItems,
+                            error = if (libraryItems.isEmpty()) "Your library is empty." else null
+                        )
+                    }
+                }
         }
     }
 

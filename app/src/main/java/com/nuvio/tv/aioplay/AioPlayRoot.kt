@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,6 +90,7 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 import android.view.KeyEvent as AndroidKeyEvent
 import java.net.URLEncoder
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 private const val HOME_ROUTE = "aioplay_home"
@@ -98,6 +100,13 @@ private enum class AioPlayHomeFocusZone {
     NAV,
     CONTENT
 }
+
+private data class AioPlayHomeFocusMemory(
+    val zone: AioPlayHomeFocusZone,
+    val key: String?,
+    val windowStartRow: Int
+)
+
 private const val SETTINGS_ROUTE = "aioplay_settings"
 private const val ACCOUNT_ROUTE = "aioplay_account"
 private const val DETAIL_ROUTE =

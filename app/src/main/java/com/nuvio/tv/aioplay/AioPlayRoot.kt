@@ -1292,6 +1292,7 @@ private fun AioPlayHomeScreen(
     var focusedContentId by remember { mutableStateOf<String?>(null) }
     var rapidNavigation by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<AioPlayItem?>(null) }
+    val contextFirstFocus = remember { FocusRequester() }
     var rapidNavigationEpoch by remember { mutableIntStateOf(0) }
 
     var pendingHeroItem by remember(
@@ -1996,6 +1997,14 @@ private fun AioPlayHomeScreen(
         }
 
         contextItem?.let { item ->
+            BackHandler {
+                contextItem = null
+                pendingContentFocusId = item.id
+            }
+            LaunchedEffect(item.id) {
+                kotlinx.coroutines.delay(80)
+                runCatching { contextFirstFocus.requestFocus() }
+            }
             Box(
                 modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.62f)),
                 contentAlignment = Alignment.Center
@@ -2008,7 +2017,7 @@ private fun AioPlayHomeScreen(
                     Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(item.name, style = MaterialTheme.typography.titleLarge, color = NuvioTheme.colors.TextPrimary, maxLines = 2)
                         Text("Title actions", style = MaterialTheme.typography.bodySmall, color = NuvioTheme.colors.TextSecondary)
-                        Button(onClick = { contextItem = null; onItem(item) }, modifier = Modifier.fillMaxWidth()) { Text(if ((item.resumePositionMs ?: 0L) > 0L) "Resume / Details" else "Play / Details") }
+                        Button(onClick = { contextItem = null; onItem(item) }, modifier = Modifier.fillMaxWidth().focusRequester(contextFirstFocus)) { Text(if ((item.resumePositionMs ?: 0L) > 0L) "Resume / Details" else "Play / Details") }
                         Button(onClick = { onToggleLibrary(item); contextItem = null; pendingContentFocusId = item.id }, modifier = Modifier.fillMaxWidth()) { Text(if (isInLibrary(item)) "Remove from Library" else "Add to Library") }
                         Button(onClick = { onToggleWatched(item); contextItem = null; pendingContentFocusId = item.id }, modifier = Modifier.fillMaxWidth()) { Text(if (isWatched(item)) "Mark Unwatched" else "Mark Watched") }
                         Button(onClick = { contextItem = null; pendingContentFocusId = item.id }, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }

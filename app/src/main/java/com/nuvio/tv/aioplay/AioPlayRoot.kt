@@ -725,15 +725,22 @@ private fun AioPlayHomeScreen(
     state: AioPlayUiState,
     restoreContentItemId: String?,
     restoreContentFocusToken: Int,
+    restoreUniversalZone: String?,
+    restoreUniversalKey: String?,
+    restoreUniversalWindowStart: Int,
+    restoreUniversalFocusToken: Int,
     onSection: (AioPlaySection) -> Unit,
     onCatalog: (AioPlayCatalog) -> Unit,
     onItem: (AioPlayItem) -> Unit,
-    onSettings: () -> Unit,
-    onAccount: () -> Unit
+    onPrefetch: (AioPlayItem) -> Unit,
+    onSettings: (AioPlayHomeFocusMemory) -> Unit,
+    onAccount: (AioPlayHomeFocusMemory) -> Unit
 ) {
     val liveFocus = remember { FocusRequester() }
     val vodFocus = remember { FocusRequester() }
     val continueFocus = remember { FocusRequester() }
+    val settingsFocus = remember { FocusRequester() }
+    val accountFocus = remember { FocusRequester() }
     val firstContentFocus = remember(state.selectedSection, state.items.firstOrNull()?.id) { FocusRequester() }
     val contentFocusRequesters = remember(
         state.selectedSection,
@@ -762,6 +769,11 @@ private fun AioPlayHomeScreen(
         state.catalogs.associate { it.selectionKey to FocusRequester() }
     }
     var focusZone by remember { mutableStateOf(AioPlayHomeFocusZone.TOP) }
+    var focusedTopKey by remember { mutableStateOf<String?>(null) }
+    var focusedNavKey by remember { mutableStateOf<String?>(null) }
+    var focusedContentId by remember { mutableStateOf<String?>(null) }
+    var rapidNavigation by remember { mutableStateOf(false) }
+    var rapidNavigationEpoch by remember { mutableIntStateOf(0) }
 
     var pendingHeroItem by remember(
         state.selectedSection,
@@ -788,6 +800,37 @@ private fun AioPlayHomeScreen(
             it.selectionKey == state.selectedCatalogId
         } ?: state.catalogs.firstOrNull() ?: return
         runCatching { navFocusRequesters[selected.selectionKey]?.requestFocus() }
+    }
+
+    fun focusMemory(): AioPlayHomeFocusMemory = AioPlayHomeFocusMemory(
+        zone = focusZone,
+        key = when (focusZone) {
+            AioPlayHomeFocusZone.TOP -> focusedTopKey
+            AioPlayHomeFocusZone.NAV -> focusedNavKey
+            AioPlayHomeFocusZone.CONTENT -> focusedContentId
+        },
+        windowStartRow = contentWindowStartRow
+    )
+
+    fun noteRapidNavigation(native: android.view.KeyEvent) {
+        if (
+            native.repeatCount > 0 &&
+            native.keyCode in setOf(
+                AndroidKeyEvent.KEYCODE_DPAD_LEFT,
+                AndroidKeyEvent.KEYCODE_DPAD_RIGHT,
+                AndroidKeyEvent.KEYCODE_DPAD_UP,
+                AndroidKeyEvent.KEYCODE_DPAD_DOWN
+            )
+        ) {
+            rapidNavigation = true
+            rapidNavigationEpoch++
+        }
+    }
+
+    LaunchedEffect(rapidNavigationEpoch) {
+        if (rapidNavigationEpoch <= 0) return@LaunchedEffect
+        delay(220)
+        rapidNavigation = false
     }
 
     LaunchedEffect(

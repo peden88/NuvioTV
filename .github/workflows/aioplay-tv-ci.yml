@@ -72,4 +72,14 @@ jobs:
               --prerelease
           fi
 
-          gh release upload aioplay-tv-latest AIOPlay-TV.apk AIOPlay-TV.sha256 --clobber
+          # Delete matching rolling assets explicitly. gh release upload --clobber
+          # occasionally races a stale asset id and fails with HTTP 404 even
+          # though the APK itself built successfully.
+          for asset_name in AIOPlay-TV.apk AIOPlay-TV.sha256; do
+            asset_id="$(gh release view aioplay-tv-latest --json assets               --jq '.assets[] | select(.name == "'"$asset_name"'") | .id'               | head -n 1 || true)"
+            if [ -n "$asset_id" ]; then
+              gh api --method DELETE                 "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"                 >/dev/null 2>&1 || true
+            fi
+          done
+
+          gh release upload aioplay-tv-latest AIOPlay-TV.apk AIOPlay-TV.sha256

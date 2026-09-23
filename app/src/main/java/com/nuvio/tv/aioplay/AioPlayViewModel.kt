@@ -464,6 +464,9 @@ class AioPlayViewModel @Inject constructor(
         viewModelScope.launch { runCatching { api.setWatched(activeToken, item, watched) } }
     }
 
+    fun isEpisodeWatched(parentId: String, season: Int?, episode: Int?): Boolean =
+        watchedItems.any { it.id == parentId && it.season == season && it.episode == episode && it.watched }
+
     fun isInLibrary(item: AioPlayItem): Boolean =
         libraryItems.any { it.id == item.id && it.type.equals(item.type, ignoreCase = true) }
 

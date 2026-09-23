@@ -413,6 +413,12 @@ private fun AioPlaySignedInApp(
                     }
                 },
                 onPrefetch = viewModel::prefetchVodMeta,
+                onSearch = { memory ->
+                    entry.savedStateHandle["aioplay_home_memory_zone"] = memory.zone.name
+                    entry.savedStateHandle["aioplay_home_memory_key"] = memory.key.orEmpty()
+                    entry.savedStateHandle["aioplay_home_memory_window_start"] = memory.windowStartRow
+                    navController.navigate(SEARCH_ROUTE)
+                },
                 onSettings = { memory ->
                     entry.savedStateHandle["aioplay_home_memory_zone"] = memory.zone.name
                     entry.savedStateHandle["aioplay_home_memory_key"] = memory.key.orEmpty()
@@ -431,6 +437,32 @@ private fun AioPlaySignedInApp(
         composable(SETTINGS_ROUTE) {
             PlaybackSettingsScreen(
                 onBackPress = {
+                    navController.previousBackStackEntry?.savedStateHandle?.let { homeState ->
+                        val token = homeState.get<Int>("aioplay_home_memory_restore_token") ?: 0
+                        homeState["aioplay_home_memory_restore_token"] = token + 1
+                    }
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(SEARCH_ROUTE) { entry ->
+            val restoreResultId by entry.savedStateHandle
+                .getStateFlow("aioplay_search_restore_item_id", "")
+                .collectAsState()
+            val restoreResultToken by entry.savedStateHandle
+                .getStateFlow("aioplay_search_restore_focus_token", 0)
+                .collectAsState()
+
+            AioPlaySearchScreen(
+                viewModel = viewModel,
+                restoreResultId = restoreResultId.takeIf { it.isNotBlank() },
+                restoreResultToken = restoreResultToken,
+                onResult = { item ->
+                    entry.savedStateHandle["aioplay_search_last_opened_item_id"] = item.id
+                    navController.navigate(detailRoute(item))
+                },
+                onBack = {
                     navController.previousBackStackEntry?.savedStateHandle?.let { homeState ->
                         val token = homeState.get<Int>("aioplay_home_memory_restore_token") ?: 0
                         homeState["aioplay_home_memory_restore_token"] = token + 1
@@ -481,14 +513,30 @@ private fun AioPlaySignedInApp(
                     navController.navigate(loadingRoute(resumeItem, contentType))
                 },
                 onBack = {
-                    navController.previousBackStackEntry?.savedStateHandle?.let { homeState ->
-                        val token = homeState.get<Int>("aioplay_home_restore_focus_token") ?: 0
-                        val originatingItemId =
-                            homeState.get<String>("aioplay_home_last_opened_item_id")
-                                ?.takeIf { it.isNotBlank() }
-                                ?: preview.id
-                        homeState["aioplay_home_restore_item_id"] = originatingItemId
-                        homeState["aioplay_home_restore_focus_token"] = token + 1
+                    val previousEntry = navController.previousBackStackEntry
+                    when (previousEntry?.destination?.route) {
+                        HOME_ROUTE -> {
+                            previousEntry.savedStateHandle.let { homeState ->
+                                val token = homeState.get<Int>("aioplay_home_restore_focus_token") ?: 0
+                                val originatingItemId =
+                                    homeState.get<String>("aioplay_home_last_opened_item_id")
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?: preview.id
+                                homeState["aioplay_home_restore_item_id"] = originatingItemId
+                                homeState["aioplay_home_restore_focus_token"] = token + 1
+                            }
+                        }
+                        SEARCH_ROUTE -> {
+                            previousEntry.savedStateHandle.let { searchState ->
+                                val token = searchState.get<Int>("aioplay_search_restore_focus_token") ?: 0
+                                val originatingItemId =
+                                    searchState.get<String>("aioplay_search_last_opened_item_id")
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?: preview.id
+                                searchState["aioplay_search_restore_item_id"] = originatingItemId
+                                searchState["aioplay_search_restore_focus_token"] = token + 1
+                            }
+                        }
                     }
                     navController.popBackStack()
                 },

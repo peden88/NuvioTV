@@ -653,7 +653,13 @@ class AioPlayApiClient @Inject constructor(
             description = json.optString("description").takeIf { it.isNotBlank() },
             poster = json.optString("poster").takeIf { it.isNotBlank() },
             background = json.optString("background").takeIf { it.isNotBlank() },
-            logo = json.optString("logo").takeIf { it.isNotBlank() }
+            logo = json.optString("logo").takeIf { it.isNotBlank() },
+            releaseInfo = json.optNonBlankString("releaseInfo")
+                ?: json.optNonBlankString("year"),
+            imdbRating = json.optNullableDouble("imdbRating")
+                ?: json.optNullableDouble("rating"),
+            genres = json.stringList("genres"),
+            runtime = json.optNonBlankString("runtime")
         )
     }
 

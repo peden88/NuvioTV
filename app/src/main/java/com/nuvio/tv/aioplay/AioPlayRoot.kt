@@ -886,6 +886,57 @@ private fun AioPlayHomeScreen(
     }
 
     LaunchedEffect(
+        restoreUniversalFocusToken,
+        restoreUniversalZone,
+        restoreUniversalKey,
+        restoreUniversalWindowStart,
+        state.selectedSection,
+        state.selectedCatalogId,
+        state.catalogs,
+        state.items
+    ) {
+        if (restoreUniversalFocusToken <= 0 || restoreUniversalZone.isNullOrBlank()) {
+            return@LaunchedEffect
+        }
+        val zone = runCatching {
+            AioPlayHomeFocusZone.valueOf(restoreUniversalZone)
+        }.getOrNull() ?: return@LaunchedEffect
+
+        when (zone) {
+            AioPlayHomeFocusZone.TOP -> {
+                val requester = when (restoreUniversalKey) {
+                    "settings" -> settingsFocus
+                    "live" -> liveFocus
+                    "vod" -> vodFocus
+                    "continue" -> continueFocus
+                    else -> selectedTopRequester()
+                }
+                runCatching { requester.requestFocus() }
+            }
+            AioPlayHomeFocusZone.NAV -> {
+                if (restoreUniversalKey == "account") {
+                    runCatching { accountFocus.requestFocus() }
+                } else {
+                    val requester = restoreUniversalKey
+                        ?.let { navFocusRequesters[it] }
+                        ?: state.selectedCatalogId?.let { navFocusRequesters[it] }
+                    runCatching { requester?.requestFocus() }
+                }
+            }
+            AioPlayHomeFocusZone.CONTENT -> {
+                val targetId = restoreUniversalKey ?: return@LaunchedEffect
+                val targetIndex = state.items.indexOfFirst { it.id == targetId }
+                if (targetIndex < 0) return@LaunchedEffect
+                val columns = if (state.selectedSection == AioPlaySection.LIVE) 3 else 6
+                val totalRows = (state.items.size + columns - 1) / columns
+                val maxStart = (totalRows - 2).coerceAtLeast(0)
+                contentWindowStartRow = restoreUniversalWindowStart.coerceIn(0, maxStart)
+                pendingContentFocusId = targetId
+            }
+        }
+    }
+
+    LaunchedEffect(
         state.selectedSection,
         state.selectedCatalogId,
         state.items.firstOrNull()?.id
@@ -902,12 +953,24 @@ private fun AioPlayHomeScreen(
 
     // Do not swap the whole background while somebody is racing across a row.
     // The short dwell makes remote navigation feel composed rather than flashy.
-    LaunchedEffect(pendingHeroItem?.id) {
+    LaunchedEffect(pendingHeroItem?.id, rapidNavigation) {
         val target = pendingHeroItem ?: return@LaunchedEffect
-        delay(160)
+        delay(if (rapidNavigation) 360 else 160)
         if (pendingHeroItem?.id == target.id) {
             heroItem = target
         }
+    }
+
+    LaunchedEffect(pendingHeroItem?.id, rapidNavigation, state.selectedSection) {
+        val target = pendingHeroItem ?: return@LaunchedEffect
+        if (state.selectedSection == AioPlaySection.LIVE) return@LaunchedEffect
+        delay(if (rapidNavigation) 520 else 360)
+        if (pendingHeroItem?.id != target.id || rapidNavigation) return@LaunchedEffect
+
+        onPrefetch(target)
+        val index = state.items.indexOfFirst { it.id == target.id }
+        state.items.getOrNull(index - 1)?.let(onPrefetch)
+        state.items.getOrNull(index + 1)?.let(onPrefetch)
     }
 
     BackHandler {

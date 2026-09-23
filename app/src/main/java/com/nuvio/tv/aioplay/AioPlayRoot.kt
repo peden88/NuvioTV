@@ -848,12 +848,14 @@ private fun AioPlayHomeScreen(
     onCatalog: (AioPlayCatalog) -> Unit,
     onItem: (AioPlayItem) -> Unit,
     onPrefetch: (AioPlayItem) -> Unit,
+    onSearch: (AioPlayHomeFocusMemory) -> Unit,
     onSettings: (AioPlayHomeFocusMemory) -> Unit,
     onAccount: (AioPlayHomeFocusMemory) -> Unit
 ) {
     val liveFocus = remember { FocusRequester() }
     val vodFocus = remember { FocusRequester() }
     val continueFocus = remember { FocusRequester() }
+    val searchFocus = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
     val accountFocus = remember { FocusRequester() }
     val firstContentFocus = remember(state.selectedSection, state.items.firstOrNull()?.id) { FocusRequester() }
@@ -1020,6 +1022,7 @@ private fun AioPlayHomeScreen(
         when (zone) {
             AioPlayHomeFocusZone.TOP -> {
                 val requester = when (restoreUniversalKey) {
+                    "search" -> searchFocus
                     "settings" -> settingsFocus
                     "live" -> liveFocus
                     "vod" -> vodFocus
@@ -1293,28 +1296,58 @@ private fun AioPlayHomeScreen(
                         }
                     }
 
-                    Button(
-                        onClick = { onSettings(focusMemory()) },
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .width(42.dp)
-                            .focusRequester(settingsFocus)
-                            .onFocusChanged {
-                                if (it.isFocused) {
-                                    focusZone = AioPlayHomeFocusZone.TOP
-                                    focusedTopKey = "settings"
-                                }
-                            },
-                        colors = ButtonDefaults.colors(
-                            containerColor = AioPlayPillIdle,
-                            focusedContainerColor = AioPlayPillSelected
-                        ),
-                        contentPadding = PaddingValues(0.dp)
+                    Row(
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Playback settings"
-                        )
+                        if (state.capabilities?.vodEnabled == true) {
+                            Button(
+                                onClick = { onSearch(focusMemory()) },
+                                modifier = Modifier
+                                    .width(42.dp)
+                                    .focusRequester(searchFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "search"
+                                        }
+                                    },
+                                colors = ButtonDefaults.colors(
+                                    containerColor = AioPlayPillIdle,
+                                    focusedContainerColor = AioPlayPillSelected
+                                ),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search all movies and series"
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = { onSettings(focusMemory()) },
+                            modifier = Modifier
+                                .width(42.dp)
+                                .focusRequester(settingsFocus)
+                                .onFocusChanged {
+                                    if (it.isFocused) {
+                                        focusZone = AioPlayHomeFocusZone.TOP
+                                        focusedTopKey = "settings"
+                                    }
+                                },
+                            colors = ButtonDefaults.colors(
+                                containerColor = AioPlayPillIdle,
+                                focusedContainerColor = AioPlayPillSelected
+                            ),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Playback settings"
+                            )
+                        }
                     }
                 }
 

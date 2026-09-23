@@ -746,8 +746,6 @@ private fun AioPlaySignedInApp(
                     }
                 },
                 onPlaybackEnded = { nextVideoId, nextSeason, nextEpisode, exitReason ->
-                    if (sessionId.isNotBlank()) viewModel.finishPlayback(sessionId)
-
                     val hasNextEpisode = fallbackContentType == "episode" &&
                         exitReason == null &&
                         (
@@ -756,9 +754,13 @@ private fun AioPlaySignedInApp(
                         )
 
                     if (!hasNextEpisode) {
+                        if (sessionId.isNotBlank()) viewModel.finishPlayback(sessionId)
                         leavePlayer()
                     } else {
                         playbackScope.launch {
+                            if (sessionId.isNotBlank()) {
+                                viewModel.finishPlaybackAndWait(sessionId)
+                            }
                             val nextItem = viewModel.resolveNextEpisode(
                                 current = item,
                                 nextVideoId = nextVideoId,

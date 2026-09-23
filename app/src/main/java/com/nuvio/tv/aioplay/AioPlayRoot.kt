@@ -715,6 +715,15 @@ private fun AioPlayHomeScreen(
     }
     var focusZone by remember { mutableStateOf(AioPlayHomeFocusZone.TOP) }
 
+    var pendingHeroItem by remember(
+        state.selectedSection,
+        state.selectedCatalogId
+    ) { mutableStateOf<AioPlayItem?>(null) }
+    var heroItem by remember(
+        state.selectedSection,
+        state.selectedCatalogId
+    ) { mutableStateOf<AioPlayItem?>(null) }
+
     fun selectedTopRequester(): FocusRequester = when (state.selectedSection) {
         AioPlaySection.LIVE -> liveFocus
         AioPlaySection.VOD -> vodFocus
@@ -785,6 +794,31 @@ private fun AioPlayHomeScreen(
         pendingContentFocusId = restoreContentItemId
     }
 
+    LaunchedEffect(
+        state.selectedSection,
+        state.selectedCatalogId,
+        state.items.firstOrNull()?.id
+    ) {
+        if (state.items.isEmpty()) {
+            heroItem = null
+            pendingHeroItem = null
+            return@LaunchedEffect
+        }
+        if (heroItem?.id !in state.items.map { it.id }) {
+            pendingHeroItem = state.items.first()
+        }
+    }
+
+    // Do not swap the whole background while somebody is racing across a row.
+    // The short dwell makes remote navigation feel composed rather than flashy.
+    LaunchedEffect(pendingHeroItem?.id) {
+        val target = pendingHeroItem ?: return@LaunchedEffect
+        delay(160)
+        if (pendingHeroItem?.id == target.id) {
+            heroItem = target
+        }
+    }
+
     BackHandler {
         when (focusZone) {
             AioPlayHomeFocusZone.TOP -> focusFirstNavItem()
@@ -793,329 +827,388 @@ private fun AioPlayHomeScreen(
         }
     }
 
-    Row(
+    val heroArtwork = heroItem?.background ?: heroItem?.poster
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(AioPlayBackgroundGradient)
     ) {
-        Column(
-            modifier = Modifier
-                .width(205.dp)
-                .fillMaxHeight()
-                .background(AioPlayGlass)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.aioplay_brand),
-                    contentDescription = "AIOPlay",
-                    modifier = Modifier
-                        .width(25.dp)
-                        .aspectRatio(1f),
-                    contentScale = ContentScale.Fit
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "AIOPlay",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 8.sp,
-                        lineHeight = 10.sp
-                    ),
-                    color = NuvioTheme.colors.TextPrimary,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
+        Crossfade(
+            targetState = heroArtwork,
+            animationSpec = tween(durationMillis = 300),
+            label = "AIOPlay hero artwork"
+        ) { artwork ->
+            if (!artwork.isNullOrBlank()) {
+                AsyncImage(
+                    model = artwork,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
             }
-
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(bottom = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                items(state.catalogs, key = { it.selectionKey }) { catalog ->
-                    val requester = navFocusRequesters[catalog.selectionKey]
-                    AioPlayNavCard(
-                        text = catalog.name,
-                        selected = state.selectedCatalogId == catalog.selectionKey,
-                        onClick = { onCatalog(catalog) },
-                        modifier = Modifier
-                            .then(
-                                if (requester != null) Modifier.focusRequester(requester)
-                                else Modifier
-                            )
-                            .onFocusChanged {
-                                if (it.isFocused) focusZone = AioPlayHomeFocusZone.NAV
-                            }
-                    )
-                }
-            }
-
-            AioPlayNavCard(
-                text = state.user?.displayName?.ifBlank { state.user.username } ?: "Account",
-                selected = false,
-                onClick = onAccount,
-                modifier = Modifier.onFocusChanged {
-                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.NAV
-                }
-            )
         }
 
-        Column(
+        // Layered scrims keep artwork legible without turning it into a flat,
+        // uniformly dark wallpaper.
+        Box(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .padding(start = 24.dp, end = 24.dp, bottom = 18.dp)
-        ) {
-            Box(
+                .fillMaxSize()
+                .background(AioPlayHeroSideGradient)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AioPlayHeroBottomGradient)
+        )
+
+        Row(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(AioPlayGlass)
-                    .padding(horizontal = 6.dp, vertical = 5.dp)
+                    .width(205.dp)
+                    .fillMaxHeight()
+                    .background(AioPlayRailGlass)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Row(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 3.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (state.capabilities?.vodEnabled == true) {
-                        AioPlaySectionCard(
-                            text = "VOD",
-                            selected = state.selectedSection == AioPlaySection.VOD,
-                            onClick = {
-                                pendingSectionFocus = AioPlaySection.VOD
-                                onSection(AioPlaySection.VOD)
-                            },
-                            modifier = Modifier
-                                .focusRequester(vodFocus)
-                                .onFocusChanged {
-                                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
-                                }
-                        )
-                    }
-                    if (state.capabilities?.sportsEnabled == true) {
-                        if (state.capabilities?.vodEnabled == true) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                        AioPlaySectionCard(
-                            text = "Live",
-                            selected = state.selectedSection == AioPlaySection.LIVE,
-                            onClick = {
-                                pendingSectionFocus = AioPlaySection.LIVE
-                                onSection(AioPlaySection.LIVE)
-                            },
-                            modifier = Modifier
-                                .focusRequester(liveFocus)
-                                .onFocusChanged {
-                                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
-                                }
-                        )
-                    }
-                    if (state.capabilities?.vodEnabled == true) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        AioPlaySectionCard(
-                            text = "Continue Watching",
-                            selected = state.selectedSection == AioPlaySection.CONTINUE,
-                            onClick = {
-                                pendingSectionFocus = AioPlaySection.CONTINUE
-                                onSection(AioPlaySection.CONTINUE)
-                            },
-                            modifier = Modifier
-                                .focusRequester(continueFocus)
-                                .onFocusChanged {
-                                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
-                                }
-                        )
-                    }
-                }
-
-                Button(
-                    onClick = onSettings,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .width(42.dp)
-                        .onFocusChanged {
-                            if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
-                        },
-                    colors = ButtonDefaults.colors(
-                        containerColor = AioPlayPillIdle,
-                        focusedContainerColor = AioPlayAccentBlue
-                    ),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Playback settings"
+                    Image(
+                        painter = painterResource(id = R.drawable.aioplay_brand),
+                        contentDescription = "AIOPlay",
+                        modifier = Modifier
+                            .width(25.dp)
+                            .aspectRatio(1f),
+                        contentScale = ContentScale.Fit
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "AIOPlay",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 8.sp,
+                            lineHeight = 10.sp
+                        ),
+                        color = NuvioTheme.colors.TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(6.dp))
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(bottom = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(state.catalogs, key = { it.selectionKey }) { catalog ->
+                        val requester = navFocusRequesters[catalog.selectionKey]
+                        AioPlayNavCard(
+                            text = catalog.name,
+                            selected = state.selectedCatalogId == catalog.selectionKey,
+                            onClick = { onCatalog(catalog) },
+                            modifier = Modifier
+                                .then(
+                                    if (requester != null) Modifier.focusRequester(requester)
+                                    else Modifier
+                                )
+                                .onFocusChanged {
+                                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.NAV
+                                }
+                        )
+                    }
+                }
 
-            val title = state.catalogs
-                .firstOrNull { it.selectionKey == state.selectedCatalogId }
-                ?.name
-                ?: state.selectedSection.label
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        fontSize = 17.sp,
-                        lineHeight = 20.sp
-                    ),
-                    color = NuvioTheme.colors.TextPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
+                AioPlayNavCard(
+                    text = state.user?.displayName?.ifBlank { state.user.username } ?: "Account",
+                    selected = false,
+                    onClick = onAccount,
+                    modifier = Modifier.onFocusChanged {
+                        if (it.isFocused) focusZone = AioPlayHomeFocusZone.NAV
+                    }
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            LaunchedEffect(state.selectedSection, state.selectedCatalogId) {
-                contentWindowStartRow = 0
-                pendingContentFocusId = null
-            }
-
-            LaunchedEffect(contentWindowStartRow, pendingContentFocusId) {
-                val focusId = pendingContentFocusId ?: return@LaunchedEffect
-                runCatching { contentFocusRequesters[focusId]?.requestFocus() }
-                pendingContentFocusId = null
-            }
-
-            when {
-                state.loadingCatalog -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(start = 24.dp, end = 24.dp, bottom = 18.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(AioPlayTopGlass)
+                        .padding(horizontal = 6.dp, vertical = 5.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AioPlayLoadingLabel("Loading…")
+                        if (state.capabilities?.vodEnabled == true) {
+                            AioPlaySectionCard(
+                                text = "VOD",
+                                selected = state.selectedSection == AioPlaySection.VOD,
+                                onClick = {
+                                    pendingSectionFocus = AioPlaySection.VOD
+                                    onSection(AioPlaySection.VOD)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(vodFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                                    }
+                            )
+                        }
+                        if (state.capabilities?.sportsEnabled == true) {
+                            if (state.capabilities?.vodEnabled == true) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            AioPlaySectionCard(
+                                text = "Live",
+                                selected = state.selectedSection == AioPlaySection.LIVE,
+                                onClick = {
+                                    pendingSectionFocus = AioPlaySection.LIVE
+                                    onSection(AioPlaySection.LIVE)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(liveFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                                    }
+                            )
+                        }
+                        if (state.capabilities?.vodEnabled == true) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AioPlaySectionCard(
+                                text = "Continue Watching",
+                                selected = state.selectedSection == AioPlaySection.CONTINUE,
+                                onClick = {
+                                    pendingSectionFocus = AioPlaySection.CONTINUE
+                                    onSection(AioPlaySection.CONTINUE)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(continueFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                                    }
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = onSettings,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .width(42.dp)
+                            .onFocusChanged {
+                                if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                            },
+                        colors = ButtonDefaults.colors(
+                            containerColor = AioPlayPillIdle,
+                            focusedContainerColor = AioPlayPillSelected
+                        ),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Playback settings"
+                        )
                     }
                 }
-                state.items.isEmpty() -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
+
+                Spacer(modifier = Modifier.height(5.dp))
+
+                AioPlayFocusedHeroInfo(
+                    item = heroItem ?: state.items.firstOrNull(),
+                    section = state.selectedSection
+                )
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                val title = state.catalogs
+                    .firstOrNull { it.selectionKey == state.selectedCatalogId }
+                    ?.name
+                    ?: state.selectedSection.label
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 14.sp,
+                            lineHeight = 17.sp
+                        ),
+                        color = NuvioTheme.colors.TextPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (state.loadingCatalog && state.items.isNotEmpty()) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .width(13.dp)
+                                .height(13.dp),
+                            strokeWidth = 1.5.dp,
+                            color = AioPlayAccentCyan
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = state.error ?: "Nothing is available in this section right now.",
+                            text = "Updating",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp),
                             color = NuvioTheme.colors.TextSecondary
                         )
                     }
                 }
-                else -> {
-                    val posterMode = state.selectedSection != AioPlaySection.LIVE
-                    val columnCount = if (posterMode) 6 else 3
-                    val totalRows = (state.items.size + columnCount - 1) / columnCount
-                    val maxWindowStart = (totalRows - 2).coerceAtLeast(0)
-                    if (contentWindowStartRow > maxWindowStart) {
-                        contentWindowStartRow = maxWindowStart
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                LaunchedEffect(state.selectedSection, state.selectedCatalogId) {
+                    contentWindowStartRow = 0
+                    pendingContentFocusId = null
+                }
+
+                LaunchedEffect(contentWindowStartRow, pendingContentFocusId) {
+                    val focusId = pendingContentFocusId ?: return@LaunchedEffect
+                    runCatching { contentFocusRequesters[focusId]?.requestFocus() }
+                    pendingContentFocusId = null
+                }
+
+                when {
+                    state.items.isEmpty() && state.loadingCatalog -> {
+                        AioPlayCatalogSkeleton(
+                            posterMode = state.selectedSection != AioPlaySection.LIVE
+                        )
                     }
-
-                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                        val rowSpacing = if (posterMode) 6.dp else 8.dp
-                        val columnSpacing = if (posterMode) 9.dp else 10.dp
-                        val rowHeight = (maxHeight - rowSpacing) / 2
-
-                        Column(
+                    state.items.isEmpty() -> {
+                        Box(
                             modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(rowSpacing)
+                            contentAlignment = Alignment.Center
                         ) {
-                            repeat(2) { visibleRow ->
-                                val absoluteRow = contentWindowStartRow + visibleRow
+                            Text(
+                                text = state.error ?: "Nothing is available in this section right now.",
+                                color = NuvioTheme.colors.TextSecondary
+                            )
+                        }
+                    }
+                    else -> {
+                        val posterMode = state.selectedSection != AioPlaySection.LIVE
+                        val columnCount = if (posterMode) 6 else 3
+                        val totalRows = (state.items.size + columnCount - 1) / columnCount
+                        val maxWindowStart = (totalRows - 2).coerceAtLeast(0)
+                        if (contentWindowStartRow > maxWindowStart) {
+                            contentWindowStartRow = maxWindowStart
+                        }
 
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(rowHeight),
-                                    horizontalArrangement = Arrangement.spacedBy(columnSpacing),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    repeat(columnCount) { column ->
-                                        val itemIndex = absoluteRow * columnCount + column
-                                        val item = state.items.getOrNull(itemIndex)
+                        BoxWithConstraints(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    alpha = if (state.loadingCatalog) 0.72f else 1f
+                                }
+                        ) {
+                            val rowSpacing = if (posterMode) 6.dp else 8.dp
+                            val columnSpacing = if (posterMode) 9.dp else 10.dp
+                            val rowHeight = (maxHeight - rowSpacing) / 2
 
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .fillMaxHeight(),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            if (item != null) {
-                                                val requester = contentFocusRequesters[item.id]
-                                                AioPlayContentCard(
-                                                    item = item,
-                                                    posterMode = posterMode,
-                                                    liveCardHeight = if (posterMode) null else rowHeight - 8.dp,
-                                                    onClick = { onItem(item) },
-                                                    modifier = Modifier
-                                                        .then(
-                                                            if (requester != null) {
-                                                                Modifier.focusRequester(requester)
-                                                            } else {
-                                                                Modifier
-                                                            }
-                                                        )
-                                                        .onPreviewKeyEvent { event ->
-                                                            val native = event.nativeKeyEvent
-                                                            if (native.action != AndroidKeyEvent.ACTION_DOWN) {
-                                                                return@onPreviewKeyEvent false
-                                                            }
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(rowSpacing)
+                            ) {
+                                repeat(2) { visibleRow ->
+                                    val absoluteRow = contentWindowStartRow + visibleRow
 
-                                                            val direction = when (native.keyCode) {
-                                                                AndroidKeyEvent.KEYCODE_DPAD_DOWN -> 1
-                                                                AndroidKeyEvent.KEYCODE_DPAD_UP -> -1
-                                                                else -> 0
-                                                            }
-                                                            if (direction == 0) {
-                                                                return@onPreviewKeyEvent false
-                                                            }
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(rowHeight),
+                                        horizontalArrangement = Arrangement.spacedBy(columnSpacing),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        repeat(columnCount) { column ->
+                                            val itemIndex = absoluteRow * columnCount + column
+                                            val item = state.items.getOrNull(itemIndex)
 
-                                                            val targetRow = absoluteRow + direction
-                                                            if (targetRow < 0 || targetRow >= totalRows) {
-                                                                return@onPreviewKeyEvent false
-                                                            }
-
-                                                            val targetRowStart = targetRow * columnCount
-                                                            val targetIndex = minOf(
-                                                                targetRowStart + column,
-                                                                state.items.lastIndex
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .fillMaxHeight(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (item != null) {
+                                                    val requester = contentFocusRequesters[item.id]
+                                                    AioPlayContentCard(
+                                                        item = item,
+                                                        section = state.selectedSection,
+                                                        posterMode = posterMode,
+                                                        liveCardHeight = if (posterMode) null else rowHeight - 8.dp,
+                                                        onClick = { onItem(item) },
+                                                        modifier = Modifier
+                                                            .then(
+                                                                if (requester != null) {
+                                                                    Modifier.focusRequester(requester)
+                                                                } else {
+                                                                    Modifier
+                                                                }
                                                             )
-                                                            if (targetIndex < targetRowStart) {
-                                                                return@onPreviewKeyEvent false
-                                                            }
+                                                            .onPreviewKeyEvent { event ->
+                                                                val native = event.nativeKeyEvent
+                                                                if (native.action != AndroidKeyEvent.ACTION_DOWN) {
+                                                                    return@onPreviewKeyEvent false
+                                                                }
 
-                                                            val targetItem = state.items[targetIndex]
-                                                            val nextWindowStart = when {
-                                                                targetRow < contentWindowStartRow ->
-                                                                    targetRow
-                                                                targetRow > contentWindowStartRow + 1 ->
-                                                                    targetRow - 1
-                                                                else ->
-                                                                    contentWindowStartRow
-                                                            }.coerceIn(0, maxWindowStart)
+                                                                val direction = when (native.keyCode) {
+                                                                    AndroidKeyEvent.KEYCODE_DPAD_DOWN -> 1
+                                                                    AndroidKeyEvent.KEYCODE_DPAD_UP -> -1
+                                                                    else -> 0
+                                                                }
+                                                                if (direction == 0) {
+                                                                    return@onPreviewKeyEvent false
+                                                                }
 
-                                                            pendingContentFocusId = targetItem.id
-                                                            contentWindowStartRow = nextWindowStart
-                                                            true
-                                                        }
-                                                        .onFocusChanged {
-                                                            if (it.isFocused) {
-                                                                focusZone = AioPlayHomeFocusZone.CONTENT
+                                                                val targetRow = absoluteRow + direction
+                                                                if (targetRow < 0 || targetRow >= totalRows) {
+                                                                    return@onPreviewKeyEvent false
+                                                                }
+
+                                                                val targetRowStart = targetRow * columnCount
+                                                                val targetIndex = minOf(
+                                                                    targetRowStart + column,
+                                                                    state.items.lastIndex
+                                                                )
+                                                                if (targetIndex < targetRowStart) {
+                                                                    return@onPreviewKeyEvent false
+                                                                }
+
+                                                                val targetItem = state.items[targetIndex]
+                                                                val nextWindowStart = when {
+                                                                    targetRow < contentWindowStartRow ->
+                                                                        targetRow
+                                                                    targetRow > contentWindowStartRow + 1 ->
+                                                                        targetRow - 1
+                                                                    else ->
+                                                                        contentWindowStartRow
+                                                                }.coerceIn(0, maxWindowStart)
+
+                                                                pendingContentFocusId = targetItem.id
+                                                                contentWindowStartRow = nextWindowStart
+                                                                true
                                                             }
-                                                        }
-                                                )
+                                                            .onFocusChanged {
+                                                                if (it.isFocused) {
+                                                                    focusZone = AioPlayHomeFocusZone.CONTENT
+                                                                    pendingHeroItem = item
+                                                                }
+                                                            }
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -1130,14 +1223,153 @@ private fun AioPlayHomeScreen(
 }
 
 @Composable
+private fun AioPlayFocusedHeroInfo(
+    item: AioPlayItem?,
+    section: AioPlaySection
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp)
+    ) {
+        if (item == null) return@Box
+
+        val metadata = remember(
+            item.id,
+            item.releaseInfo,
+            item.imdbRating,
+            item.runtime,
+            item.genres,
+            item.season,
+            item.episode,
+            section
+        ) {
+            buildList {
+                if (section == AioPlaySection.LIVE) {
+                    add("LIVE")
+                } else if (
+                    section == AioPlaySection.CONTINUE &&
+                    item.season != null &&
+                    item.episode != null
+                ) {
+                    add(
+                        "S" + item.season.toString().padStart(2, '0') +
+                            "E" + item.episode.toString().padStart(2, '0')
+                    )
+                } else {
+                    item.releaseInfo?.takeIf { it.isNotBlank() }?.let(::add)
+                    item.imdbRating?.takeIf { it > 0.0 }?.let {
+                        add("★ " + String.format(java.util.Locale.US, "%.1f", it))
+                    }
+                    item.runtime?.takeIf { it.isNotBlank() }?.let(::add)
+                    item.genres.take(2).filter { it.isNotBlank() }.forEach(::add)
+                }
+            }.take(5)
+        }
+
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(205.dp)
+                    .height(44.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (!item.logo.isNullOrBlank()) {
+                    AsyncImage(
+                        model = item.logo,
+                        contentDescription = item.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 18.sp,
+                            lineHeight = 21.sp
+                        ),
+                        color = NuvioTheme.colors.TextPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                if (metadata.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        metadata.forEach { label ->
+                            AioPlayMetaChip(label)
+                        }
+                    }
+                }
+
+                val detail = when {
+                    section == AioPlaySection.CONTINUE && !item.description.isNullOrBlank() ->
+                        item.description
+                    section == AioPlaySection.CONTINUE && !item.episodeTitle.isNullOrBlank() ->
+                        item.episodeTitle
+                    else -> item.description
+                }
+                if (!detail.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = detail.lineSequence().firstOrNull().orEmpty(),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 10.sp,
+                            lineHeight = 12.sp
+                        ),
+                        color = Color.White.copy(alpha = 0.72f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayMetaChip(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color.Black.copy(alpha = 0.34f))
+            .padding(horizontal = 7.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 8.sp,
+                lineHeight = 9.sp
+            ),
+            color = Color.White.copy(alpha = 0.84f),
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
 private fun AioPlaySectionCard(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = remember { RoundedCornerShape(20.dp) }
-    val innerShape = remember { RoundedCornerShape(17.dp) }
+    val shape = remember { RoundedCornerShape(18.dp) }
+    val innerShape = remember { RoundedCornerShape(16.dp) }
     var isFocused by remember { mutableStateOf(false) }
 
     Card(
@@ -1162,19 +1394,22 @@ private fun AioPlaySectionCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(
-                    if (isFocused) {
-                        Modifier.background(Color.White, shape)
-                    } else {
-                        Modifier.background(AioPlayAccentGradient, shape)
+                    when {
+                        isFocused -> Modifier.background(Color.White.copy(alpha = 0.92f), shape)
+                        selected -> Modifier.background(AioPlayAccentGradient, shape)
+                        else -> Modifier.background(Color.White.copy(alpha = 0.08f), shape)
                     }
                 )
-                .padding(if (isFocused) 3.dp else 2.dp)
-                .then(
-                    if (selected) {
-                        Modifier.background(AioPlayAccentGradient, innerShape)
-                    } else {
-                        Modifier.background(AioPlayPillIdle, innerShape)
+                .padding(
+                    when {
+                        isFocused -> 2.5.dp
+                        selected -> 1.5.dp
+                        else -> 1.dp
                     }
+                )
+                .background(
+                    if (selected) AioPlayPillSelected else AioPlayPillIdle,
+                    innerShape
                 )
                 .padding(vertical = 6.dp, horizontal = 14.dp),
             contentAlignment = Alignment.Center
@@ -1186,7 +1421,7 @@ private fun AioPlaySectionCard(
                     lineHeight = 13.sp
                 ),
                 color = Color.White,
-                fontWeight = FontWeight.Medium,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1
             )
         }
@@ -1200,8 +1435,8 @@ private fun AioPlayNavCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = remember { RoundedCornerShape(14.dp) }
-    val innerShape = remember { RoundedCornerShape(12.dp) }
+    val shape = remember { RoundedCornerShape(13.dp) }
+    val innerShape = remember { RoundedCornerShape(11.dp) }
     var isFocused by remember { mutableStateOf(false) }
 
     Card(
@@ -1220,25 +1455,28 @@ private fun AioPlayNavCard(
                 shape = shape
             )
         ),
-        scale = CardDefaults.scale(focusedScale = 1.025f)
+        scale = CardDefaults.scale(focusedScale = 1.03f)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(
-                    if (isFocused) {
-                        Modifier.background(Color.White, shape)
-                    } else {
-                        Modifier.background(AioPlayAccentGradient, shape)
+                    when {
+                        isFocused -> Modifier.background(Color.White.copy(alpha = 0.90f), shape)
+                        selected -> Modifier.background(AioPlayAccentGradient, shape)
+                        else -> Modifier.background(Color.White.copy(alpha = 0.06f), shape)
                     }
                 )
-                .padding(if (isFocused) 2.dp else 1.5.dp)
-                .then(
-                    if (selected) {
-                        Modifier.background(AioPlayAccentGradient, innerShape)
-                    } else {
-                        Modifier.background(AioPlayPillIdle, innerShape)
+                .padding(
+                    when {
+                        isFocused -> 2.dp
+                        selected -> 1.5.dp
+                        else -> 1.dp
                     }
+                )
+                .background(
+                    if (selected) AioPlayPillSelected else AioPlayPillIdle,
+                    innerShape
                 )
                 .padding(horizontal = 13.dp, vertical = 6.dp)
         ) {
@@ -1249,6 +1487,7 @@ private fun AioPlayNavCard(
                     lineHeight = 13.sp
                 ),
                 color = Color.White,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1259,6 +1498,7 @@ private fun AioPlayNavCard(
 @Composable
 private fun AioPlayContentCard(
     item: AioPlayItem,
+    section: AioPlaySection,
     posterMode: Boolean,
     liveCardHeight: Dp? = null,
     onClick: () -> Unit,
@@ -1271,11 +1511,21 @@ private fun AioPlayContentCard(
         }
         val cardDepthStyle = LocalCardDepthStyle.current
         var isFocused by remember { mutableStateOf(false) }
+        val progress = if (
+            item.resumeDurationMs != null &&
+            item.resumeDurationMs > 0L &&
+            item.resumePositionMs != null
+        ) {
+            (item.resumePositionMs.toFloat() / item.resumeDurationMs.toFloat())
+                .coerceIn(0f, 1f)
+        } else {
+            0f
+        }
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 3.dp, vertical = 5.dp)
+                .padding(horizontal = 3.dp, vertical = 4.dp)
         ) {
             Card(
                 onClick = onClick,
@@ -1290,11 +1540,11 @@ private fun AioPlayContentCard(
                 ),
                 border = CardDefaults.border(
                     focusedBorder = Border(
-                        border = BorderStroke(posterStyle.focusedBorderWidth, AioPlayAccentGradient),
+                        border = BorderStroke(2.5.dp, AioPlayAccentGradient),
                         shape = shape
                     )
                 ),
-                scale = CardDefaults.scale(focusedScale = posterStyle.focusedScale)
+                scale = CardDefaults.scale(focusedScale = 1.045f)
             ) {
                 Box(
                     modifier = Modifier
@@ -1316,6 +1566,40 @@ private fun AioPlayContentCard(
                             contentScale = ContentScale.Crop
                         )
                     }
+
+                    if (section == AioPlaySection.CONTINUE) {
+                        AioPlayMiniBadge(
+                            text = "RESUME",
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(7.dp)
+                        )
+                    }
+
+                    if (isFocused) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(AioPlayFocusSheen)
+                        )
+                    }
+
+                    if (progress > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .background(Color.Black.copy(alpha = 0.55f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progress)
+                                    .fillMaxHeight()
+                                    .background(AioPlayAccentCyan)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1335,11 +1619,29 @@ private fun AioPlayContentCard(
                         end = NuvioTheme.spacing.xxs
                     )
             )
+
+            if (section == AioPlaySection.CONTINUE && !item.description.isNullOrBlank()) {
+                Text(
+                    text = item.description,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 8.5.sp,
+                        lineHeight = 10.sp
+                    ),
+                    color = Color.White.copy(alpha = 0.62f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = NuvioTheme.spacing.xxs)
+                )
+            }
         }
         return
     }
 
     val shape = RoundedCornerShape(12.dp)
+    var isFocused by remember { mutableStateOf(false) }
+
     Card(
         onClick = onClick,
         modifier = modifier
@@ -1350,7 +1652,8 @@ private fun AioPlayContentCard(
                 } else {
                     Modifier.aspectRatio(16f / 9f)
                 }
-            ),
+            )
+            .onFocusChanged { isFocused = it.isFocused },
         shape = CardDefaults.shape(shape = shape),
         colors = CardDefaults.colors(
             containerColor = NuvioTheme.colors.BackgroundCard,
@@ -1358,11 +1661,11 @@ private fun AioPlayContentCard(
         ),
         border = CardDefaults.border(
             focusedBorder = Border(
-                border = BorderStroke(3.dp, AioPlayAccentGradient),
+                border = BorderStroke(2.5.dp, AioPlayAccentGradient),
                 shape = shape
             )
         ),
-        scale = CardDefaults.scale(focusedScale = 1.035f)
+        scale = CardDefaults.scale(focusedScale = 1.045f)
     ) {
         Box(
             modifier = Modifier
@@ -1387,18 +1690,33 @@ private fun AioPlayContentCard(
                         Brush.verticalGradient(
                             listOf(
                                 Color.Transparent,
-                                Color.Black.copy(alpha = 0.24f),
-                                Color.Black.copy(alpha = 0.9f)
+                                Color.Black.copy(alpha = 0.16f),
+                                Color.Black.copy(alpha = 0.82f)
                             )
                         )
                     )
             )
 
+            AioPlayMiniBadge(
+                text = "● LIVE",
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+            )
+
+            if (isFocused) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(AioPlayFocusSheen)
+                )
+            }
+
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .padding(9.dp)
+                    .padding(10.dp)
             ) {
                 Text(
                     text = item.name,
@@ -1412,16 +1730,117 @@ private fun AioPlayContentCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 if (!item.description.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = item.description.lineSequence().firstOrNull().orEmpty(),
                         style = MaterialTheme.typography.bodySmall.copy(
                             fontSize = 9.sp,
                             lineHeight = 11.sp
                         ),
-                        color = Color.White.copy(alpha = 0.76f),
+                        color = Color.White.copy(alpha = 0.70f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayMiniBadge(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xB814181D))
+            .padding(horizontal = 7.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 8.sp,
+                lineHeight = 9.sp
+            ),
+            color = Color.White.copy(alpha = 0.88f),
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun AioPlayCatalogSkeleton(
+    posterMode: Boolean
+) {
+    val pulse by rememberInfiniteTransition(label = "AIOPlay loading pulse")
+        .animateFloat(
+            initialValue = 0.24f,
+            targetValue = 0.46f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 850),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "AIOPlay loading alpha"
+        )
+
+    val columnCount = if (posterMode) 6 else 3
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val rowSpacing = if (posterMode) 6.dp else 8.dp
+        val columnSpacing = if (posterMode) 9.dp else 10.dp
+        val rowHeight = (maxHeight - rowSpacing) / 2
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(rowSpacing)
+        ) {
+            repeat(2) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(rowHeight),
+                    horizontalArrangement = Arrangement.spacedBy(columnSpacing),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(columnCount) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (posterMode) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(2f / 3f)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(Color.White.copy(alpha = pulse))
+                                    )
+                                    Spacer(modifier = Modifier.height(5.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.66f)
+                                            .height(8.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(Color.White.copy(alpha = pulse * 0.72f))
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(rowHeight - 8.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color.White.copy(alpha = pulse))
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

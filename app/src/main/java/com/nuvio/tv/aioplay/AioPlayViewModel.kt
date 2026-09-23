@@ -52,6 +52,7 @@ class AioPlayViewModel @Inject constructor(
     private var vodCatalogs: List<AioPlayCatalog> = emptyList()
     private var continueWatchingItems: List<AioPlayItem> = emptyList()
     private var libraryItems: List<AioPlayItem> = emptyList()
+    private var watchedItems: List<AioPlayWatchState> = emptyList()
     private var localProgressByKey: Map<String, WatchProgress> = emptyMap()
     private val sharedProgressByKey = mutableMapOf<String, WatchProgress>()
     private val pushedProgressFingerprints = mutableMapOf<String, String>()
@@ -439,6 +440,26 @@ class AioPlayViewModel @Inject constructor(
 
             if (preferred != null) loadCatalogInternal(preferred)
         }
+    }
+
+    fun isWatched(item: AioPlayItem): Boolean {
+        val id = item.parentId ?: item.id
+        return watchedItems.any {
+            it.id == id &&
+                it.watched &&
+                (item.season == null || it.season == item.season) &&
+                (item.episode == null || it.episode == item.episode)
+        }
+    }
+
+    fun setWatched(item: AioPlayItem, watched: Boolean) {
+        val activeToken = token ?: return
+        val id = item.parentId ?: item.id
+        val type = if (item.type.equals("episode", true)) "series" else item.type
+        watchedItems = watchedItems.filterNot {
+            it.id == id && it.season == item.season && it.episode == item.episode
+        } + AioPlayWatchState(id, type, item.season, item.episode, watched, System.currentTimeMillis())
+        viewModelScope.launch { runCatching { api.setWatched(activeToken, item, watched) } }
     }
 
     fun isInLibrary(item: AioPlayItem): Boolean =

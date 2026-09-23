@@ -471,6 +471,25 @@ class AioPlayViewModel @Inject constructor(
     private fun vodMetaKey(type: String, id: String): String =
         type.lowercase() + "|" + id
 
+    suspend fun searchVod(
+        query: String,
+        type: String? = null
+    ): Result<List<AioPlayItem>> {
+        val activeToken = token ?: return Result.failure(
+            AioPlayApiException("Your session has expired.", 403)
+        )
+        val normalizedType = type
+            ?.lowercase()
+            ?.takeIf { it == "movie" || it == "series" }
+        return runCatching {
+            api.searchVod(
+                token = activeToken,
+                query = query,
+                type = normalizedType
+            )
+        }
+    }
+
     suspend fun loadVodMeta(type: String, id: String): Result<AioPlayMetaDetails> {
         val normalizedType = when (type.lowercase()) {
             "tv", "episode" -> "series"

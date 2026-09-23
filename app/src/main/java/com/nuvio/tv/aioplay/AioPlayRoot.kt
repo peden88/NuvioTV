@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -41,6 +42,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -109,6 +111,7 @@ private data class AioPlayHomeFocusMemory(
 
 private const val SETTINGS_ROUTE = "aioplay_settings"
 private const val ACCOUNT_ROUTE = "aioplay_account"
+private const val SEARCH_ROUTE = "aioplay_search"
 private const val DETAIL_ROUTE =
     "aioplay_detail?itemId={itemId}&itemType={itemType}&title={title}&poster={poster}&backdrop={backdrop}&logo={logo}"
 private const val SERIES_ROUTE =

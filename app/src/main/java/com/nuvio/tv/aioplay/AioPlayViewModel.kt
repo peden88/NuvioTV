@@ -19,7 +19,8 @@ import kotlinx.coroutines.launch
 enum class AioPlaySection(val label: String) {
     LIVE("Live"),
     VOD("VOD"),
-    CONTINUE("Continue Watching")
+    CONTINUE("Continue Watching"),
+    LIBRARY("Library")
 }
 
 data class AioPlayUiState(
@@ -68,6 +69,12 @@ class AioPlayViewModel @Inject constructor(
             eldest: MutableMap.MutableEntry<String, CachedSearch>?
         ): Boolean = size > 24
     }
+
+    private val libraryCatalog = AioPlayCatalog(
+        id = "library",
+        name = "Library",
+        type = "library"
+    )
 
     private val continueWatchingCatalog = AioPlayCatalog(
         id = "continue_watching",
@@ -372,6 +379,9 @@ class AioPlayViewModel @Inject constructor(
         AioPlaySection.LIVE -> liveCatalogs
         AioPlaySection.VOD -> vodCatalogs
         AioPlaySection.CONTINUE -> listOf(continueWatchingCatalog)
+        // Server-backed library items are wired in the next API pass. Keeping the
+        // section live now lets navigation/focus behaviour ship independently.
+        AioPlaySection.LIBRARY -> listOf(libraryCatalog)
     }
 
     fun selectSection(section: AioPlaySection) {

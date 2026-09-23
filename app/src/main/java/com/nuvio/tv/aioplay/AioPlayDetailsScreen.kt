@@ -124,6 +124,11 @@ internal fun AioPlayDetailsScreen(
                 onToggleLibrary = {
                     if (viewModel.isInLibrary(details!!.item)) viewModel.removeFromLibrary(details!!.item)
                     else viewModel.addToLibrary(details!!.item)
+                },
+                isWatched = viewModel.isWatched(details!!.item),
+                onToggleWatched = {
+                    val item = details!!.item
+                    viewModel.setWatched(item, !viewModel.isWatched(item))
                 }
             )
         }
@@ -139,7 +144,9 @@ private fun AioPlayRichDetails(
     restoreEpisodeFocusToken: Int,
     restoreHeroFocusToken: Int,
     isInLibrary: Boolean,
-    onToggleLibrary: () -> Unit
+    onToggleLibrary: () -> Unit,
+    isWatched: Boolean,
+    onToggleWatched: () -> Unit
 ) {
     val meta = details.meta
     val isSeries = meta.apiType.equals("series", ignoreCase = true) ||
@@ -253,11 +260,11 @@ private fun AioPlayRichDetails(
                     isInLibrary = isInLibrary,
                     onToggleLibrary = onToggleLibrary,
                     onLibraryLongPress = onToggleLibrary,
-                    isMovieWatched = false,
+                    isMovieWatched = isWatched,
                     isMovieWatchedPending = false,
-                    onToggleMovieWatched = {},
+                    onToggleMovieWatched = onToggleWatched,
                     showLibraryAction = true,
-                    showWatchedAction = false,
+                    showWatchedAction = !isSeries,
                     onRandomClick = null,
                     trailerAvailable = false,
                     playButtonFocusRequester = heroFocus

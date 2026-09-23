@@ -201,6 +201,36 @@ class AioPlayApiClient @Inject constructor(
         )
     }
 
+    suspend fun watchState(token: String): List<AioPlayWatchState> {
+        val json = requestJson("/api/v1/watch-state", token = token)
+        val rows = json.optJSONArray("items") ?: return emptyList()
+        return buildList {
+            for (i in 0 until rows.length()) {
+                val row = rows.optJSONObject(i) ?: continue
+                val id = row.optString("id").trim()
+                if (id.isBlank()) continue
+                add(AioPlayWatchState(
+                    id = id,
+                    type = row.optString("type").ifBlank { "movie" },
+                    season = row.optNullableInt("season"),
+                    episode = row.optNullableInt("episode"),
+                    watched = row.optBoolean("watched", false),
+                    updatedAt = row.optLong("updatedAt", 0L)
+                ))
+            }
+        }
+    }
+
+    suspend fun setWatched(token: String, item: AioPlayItem, watched: Boolean) {
+        val payload = JSONObject()
+            .put("id", item.parentId ?: item.id)
+            .put("type", if (item.type.equals("episode", true)) "series" else item.type)
+            .put("season", item.season ?: JSONObject.NULL)
+            .put("episode", item.episode ?: JSONObject.NULL)
+            .put("watched", watched)
+        requestJson("/api/v1/watch-state", method = "PUT", token = token, body = payload)
+    }
+
     suspend fun library(token: String): List<AioPlayItem> {
         val json = requestJson("/api/v1/library", token = token)
         val array = json.optJSONArray("items") ?: return emptyList()

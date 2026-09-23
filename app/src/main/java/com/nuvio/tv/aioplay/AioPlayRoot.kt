@@ -1292,6 +1292,7 @@ private fun AioPlayHomeScreen(
     var focusedContentId by remember { mutableStateOf<String?>(null) }
     var rapidNavigation by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<AioPlayItem?>(null) }
+    var suppressSelectReleaseForItemId by remember { mutableStateOf<String?>(null) }
     val contextFirstFocus = remember { FocusRequester() }
     var rapidNavigationEpoch by remember { mutableIntStateOf(0) }
 
@@ -1926,15 +1927,30 @@ private fun AioPlayHomeScreen(
                                                             )
                                                             .onPreviewKeyEvent { event ->
                                                                 val native = event.nativeKeyEvent
+                                                                val isSelectKey = native.keyCode in setOf(
+                                                                    AndroidKeyEvent.KEYCODE_DPAD_CENTER,
+                                                                    AndroidKeyEvent.KEYCODE_ENTER
+                                                                )
+                                                                if (native.action == AndroidKeyEvent.ACTION_UP) {
+                                                                    if (
+                                                                        isSelectKey &&
+                                                                        suppressSelectReleaseForItemId == item.id
+                                                                    ) {
+                                                                        suppressSelectReleaseForItemId = null
+                                                                        return@onPreviewKeyEvent true
+                                                                    }
+                                                                    return@onPreviewKeyEvent false
+                                                                }
                                                                 if (native.action != AndroidKeyEvent.ACTION_DOWN) {
                                                                     return@onPreviewKeyEvent false
                                                                 }
                                                                 noteRapidNavigation(native)
                                                                 if (
                                                                     state.selectedSection != AioPlaySection.LIVE &&
-                                                                    native.repeatCount == 1 &&
-                                                                    native.keyCode in setOf(AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER)
+                                                                    native.repeatCount >= 1 &&
+                                                                    isSelectKey
                                                                 ) {
+                                                                    suppressSelectReleaseForItemId = item.id
                                                                     contextItem = item
                                                                     return@onPreviewKeyEvent true
                                                                 }

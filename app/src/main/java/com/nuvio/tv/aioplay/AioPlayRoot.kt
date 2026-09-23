@@ -2014,19 +2014,66 @@ private fun AioPlayPlaybackLoadingScreen(
             .background(AioPlayBackgroundGradient),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp)
-        ) {
-            if (error == null) {
-                AioPlayLoadingLabel(
-                    if (sessionId.isBlank()) {
-                        "Finding the best available stream…"
-                    } else {
-                        "Trying another stream automatically…"
-                    }
+        val artwork = item.background ?: item.poster
+        if (!artwork.isNullOrBlank()) {
+            AsyncImage(
+                model = artwork,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AioPlayContentDim)
+                .background(AioPlayHeroSideGradient)
+                .background(AioPlayHeroBottomGradient)
+        )
+
+        if (error == null) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                if (!item.logo.isNullOrBlank()) {
+                    AsyncImage(
+                        model = item.logo,
+                        contentDescription = item.parentName ?: item.name,
+                        modifier = Modifier
+                            .width(280.dp)
+                            .height(92.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Text(
+                        text = item.parentName ?: item.name,
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = NuvioTheme.colors.TextPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .width(24.dp)
+                        .height(24.dp),
+                    strokeWidth = 2.dp,
+                    color = AioPlayAccentCyan
                 )
-            } else {
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .width(520.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(AioPlayDetailCard.copy(alpha = 0.88f))
+                    .padding(26.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 Text(
                     text = error.orEmpty(),
                     color = NuvioTheme.colors.TextPrimary,

@@ -334,6 +334,8 @@ class AioPlayViewModel @Inject constructor(
         val activeToken = token ?: return
         val capabilities = api.capabilities(activeToken)
         runCatching { syncSharedProgress(activeToken) }
+        runCatching { api.library(activeToken) }.onSuccess { libraryItems = it }
+        runCatching { api.watchState(activeToken) }.onSuccess { watchedItems = it }
 
         liveCatalogs = if (capabilities.sportsEnabled) {
             api.catalogs(activeToken)
@@ -381,8 +383,6 @@ class AioPlayViewModel @Inject constructor(
         AioPlaySection.LIVE -> liveCatalogs
         AioPlaySection.VOD -> vodCatalogs
         AioPlaySection.CONTINUE -> listOf(continueWatchingCatalog)
-        // Server-backed library items are wired in the next API pass. Keeping the
-        // section live now lets navigation/focus behaviour ship independently.
         AioPlaySection.LIBRARY -> listOf(libraryCatalog)
     }
 
@@ -504,6 +504,16 @@ class AioPlayViewModel @Inject constructor(
     }
 
     fun refreshCurrentCatalog() {
+        if (_state.value.selectedSection == AioPlaySection.LIBRARY) {
+            viewModelScope.launch {
+                token?.let { activeToken ->
+                    runCatching { api.library(activeToken) }.onSuccess { libraryItems = it }
+                    runCatching { api.watchState(activeToken) }.onSuccess { watchedItems = it }
+                }
+                _state.value = _state.value.copy(items = libraryItems, error = if (libraryItems.isEmpty()) "Your library is empty." else null)
+            }
+            return
+        }
         if (_state.value.selectedSection == AioPlaySection.CONTINUE) {
             viewModelScope.launch {
                 token?.let { activeToken -> runCatching { pullSharedProgress(activeToken) } }

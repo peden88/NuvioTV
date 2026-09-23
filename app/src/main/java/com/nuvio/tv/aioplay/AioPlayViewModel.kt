@@ -34,6 +34,7 @@ data class AioPlayUiState(
     val selectedCatalogId: String? = null,
     val items: List<AioPlayItem> = emptyList(),
     val loadingCatalog: Boolean = false,
+    val accountStateRevision: Int = 0,
     val error: String? = null
 )
 
@@ -459,6 +460,7 @@ class AioPlayViewModel @Inject constructor(
         watchedItems = watchedItems.filterNot {
             it.id == id && it.season == item.season && it.episode == item.episode
         } + AioPlayWatchState(id, type, item.season, item.episode, watched, System.currentTimeMillis())
+        _state.value = _state.value.copy(accountStateRevision = _state.value.accountStateRevision + 1)
         viewModelScope.launch { runCatching { api.setWatched(activeToken, item, watched) } }
     }
 
@@ -473,8 +475,10 @@ class AioPlayViewModel @Inject constructor(
                     libraryItems = listOf(saved) + libraryItems.filterNot {
                         it.id == saved.id && it.type.equals(saved.type, ignoreCase = true)
                     }
-                    if (_state.value.selectedSection == AioPlaySection.LIBRARY) {
-                        _state.value = _state.value.copy(items = libraryItems, error = null)
+                    _state.value = if (_state.value.selectedSection == AioPlaySection.LIBRARY) {
+                        _state.value.copy(items = libraryItems, error = null, accountStateRevision = _state.value.accountStateRevision + 1)
+                    } else {
+                        _state.value.copy(accountStateRevision = _state.value.accountStateRevision + 1)
                     }
                 }
         }
@@ -488,11 +492,14 @@ class AioPlayViewModel @Inject constructor(
                     libraryItems = libraryItems.filterNot {
                         it.id == item.id && it.type.equals(item.type, ignoreCase = true)
                     }
-                    if (_state.value.selectedSection == AioPlaySection.LIBRARY) {
-                        _state.value = _state.value.copy(
+                    _state.value = if (_state.value.selectedSection == AioPlaySection.LIBRARY) {
+                        _state.value.copy(
                             items = libraryItems,
-                            error = if (libraryItems.isEmpty()) "Your library is empty." else null
+                            error = if (libraryItems.isEmpty()) "Your library is empty." else null,
+                            accountStateRevision = _state.value.accountStateRevision + 1
                         )
+                    } else {
+                        _state.value.copy(accountStateRevision = _state.value.accountStateRevision + 1)
                     }
                 }
         }

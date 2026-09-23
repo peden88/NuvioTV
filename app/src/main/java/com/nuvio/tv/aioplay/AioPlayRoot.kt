@@ -413,6 +413,13 @@ private fun AioPlaySignedInApp(
                         AioPlaySection.LIBRARY -> navController.navigate(detailRoute(item))
                     }
                 },
+                onToggleLibrary = { item ->
+                    if (viewModel.isInLibrary(item)) viewModel.removeFromLibrary(item)
+                    else viewModel.addToLibrary(item)
+                },
+                isInLibrary = viewModel::isInLibrary,
+                onToggleWatched = { item -> viewModel.setWatched(item, !viewModel.isWatched(item)) },
+                isWatched = viewModel::isWatched,
                 onPrefetch = viewModel::prefetchVodMeta,
                 onSearch = { memory ->
                     entry.savedStateHandle["aioplay_home_memory_zone"] = memory.zone.name
@@ -1236,6 +1243,10 @@ private fun AioPlayHomeScreen(
     onSection: (AioPlaySection) -> Unit,
     onCatalog: (AioPlayCatalog) -> Unit,
     onItem: (AioPlayItem) -> Unit,
+    onToggleLibrary: (AioPlayItem) -> Unit,
+    isInLibrary: (AioPlayItem) -> Boolean,
+    onToggleWatched: (AioPlayItem) -> Unit,
+    isWatched: (AioPlayItem) -> Boolean,
     onPrefetch: (AioPlayItem) -> Unit,
     onSearch: (AioPlayHomeFocusMemory) -> Unit,
     onSettings: (AioPlayHomeFocusMemory) -> Unit,
@@ -1829,10 +1840,21 @@ private fun AioPlayHomeScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = state.error ?: "Nothing is available in this section right now.",
-                                color = NuvioTheme.colors.TextSecondary
-                            )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = if (state.selectedSection == AioPlaySection.LIBRARY) "Your Library is empty" else (state.error ?: "Nothing is available in this section right now."),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = NuvioTheme.colors.TextPrimary
+                                )
+                                if (state.selectedSection == AioPlaySection.LIBRARY) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Open a movie or series and choose + Library to save it here.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = NuvioTheme.colors.TextSecondary
+                                    )
+                                }
+                            }
                         }
                     }
                     else -> {
@@ -1887,6 +1909,8 @@ private fun AioPlayHomeScreen(
                                                         posterMode = posterMode,
                                                         liveCardHeight = if (posterMode) null else rowHeight - 8.dp,
                                                         onClick = { onItem(item) },
+                                                        inLibrary = isInLibrary(item),
+                                                        watched = isWatched(item),
                                                         modifier = Modifier
                                                             .then(
                                                                 if (requester != null) {
@@ -2105,6 +2129,8 @@ private fun AioPlaySectionCard(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,
+    inLibrary: Boolean = false,
+    watched: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val shape = remember { RoundedCornerShape(18.dp) }
@@ -2303,6 +2329,18 @@ private fun AioPlayContentCard(
                             contentDescription = item.name,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
+                        )
+                    }
+
+                    if (inLibrary) {
+                        AioPlayMiniBadge(
+                            text = "LIBRARY",
+                            modifier = Modifier.align(Alignment.TopEnd).padding(7.dp)
+                        )
+                    } else if (watched) {
+                        AioPlayMiniBadge(
+                            text = "✓ WATCHED",
+                            modifier = Modifier.align(Alignment.TopEnd).padding(7.dp)
                         )
                     }
 

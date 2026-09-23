@@ -407,6 +407,18 @@ class AioPlayViewModel @Inject constructor(
                 return@launch
             }
 
+            if (section == AioPlaySection.LIBRARY) {
+                _state.value = _state.value.copy(
+                    selectedSection = section,
+                    catalogs = catalogs,
+                    selectedCatalogId = preferred?.selectionKey,
+                    items = emptyList(),
+                    loadingCatalog = false,
+                    error = "Your library is empty."
+                )
+                return@launch
+            }
+
             _state.value = _state.value.copy(
                 selectedSection = section,
                 catalogs = catalogs,

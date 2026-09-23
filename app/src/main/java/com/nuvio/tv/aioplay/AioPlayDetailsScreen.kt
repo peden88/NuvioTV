@@ -119,7 +119,12 @@ internal fun AioPlayDetailsScreen(
                 restoreEpisodeId = restoreEpisodeId,
                 restoreEpisodeSeason = restoreEpisodeSeason,
                 restoreEpisodeFocusToken = restoreEpisodeFocusToken,
-                restoreHeroFocusToken = restoreHeroFocusToken
+                restoreHeroFocusToken = restoreHeroFocusToken,
+                isInLibrary = viewModel.isInLibrary(details!!.item),
+                onToggleLibrary = {
+                    if (viewModel.isInLibrary(details!!.item)) viewModel.removeFromLibrary(details!!.item)
+                    else viewModel.addToLibrary(details!!.item)
+                }
             )
         }
     }
@@ -132,7 +137,9 @@ private fun AioPlayRichDetails(
     restoreEpisodeId: String?,
     restoreEpisodeSeason: Int?,
     restoreEpisodeFocusToken: Int,
-    restoreHeroFocusToken: Int
+    restoreHeroFocusToken: Int,
+    isInLibrary: Boolean,
+    onToggleLibrary: () -> Unit
 ) {
     val meta = details.meta
     val isSeries = meta.apiType.equals("series", ignoreCase = true) ||
@@ -243,13 +250,13 @@ private fun AioPlayRichDetails(
                         }
                     },
                     onPlayLongPress = null,
-                    isInLibrary = false,
-                    onToggleLibrary = {},
-                    onLibraryLongPress = {},
+                    isInLibrary = isInLibrary,
+                    onToggleLibrary = onToggleLibrary,
+                    onLibraryLongPress = onToggleLibrary,
                     isMovieWatched = false,
                     isMovieWatchedPending = false,
                     onToggleMovieWatched = {},
-                    showLibraryAction = false,
+                    showLibraryAction = true,
                     showWatchedAction = false,
                     onRandomClick = null,
                     trailerAvailable = false,

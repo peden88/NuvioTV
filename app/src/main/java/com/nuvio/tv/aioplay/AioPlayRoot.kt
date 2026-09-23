@@ -410,6 +410,7 @@ private fun AioPlaySignedInApp(
                             navController.navigate(detailRoute(detailsItem))
                             navController.navigate(loadingRoute(resumeItem, contentType))
                         }
+                        AioPlaySection.LIBRARY -> navController.navigate(detailRoute(item))
                     }
                 },
                 onPrefetch = viewModel::prefetchVodMeta,
@@ -1243,6 +1244,7 @@ private fun AioPlayHomeScreen(
     val liveFocus = remember { FocusRequester() }
     val vodFocus = remember { FocusRequester() }
     val continueFocus = remember { FocusRequester() }
+    val libraryFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
     val settingsFocus = remember { FocusRequester() }
     val accountFocus = remember { FocusRequester() }
@@ -1293,6 +1295,7 @@ private fun AioPlayHomeScreen(
         AioPlaySection.LIVE -> liveFocus
         AioPlaySection.VOD -> vodFocus
         AioPlaySection.CONTINUE -> continueFocus
+        AioPlaySection.LIBRARY -> libraryFocus
     }
 
     fun focusFirstNavItem() {
@@ -1348,7 +1351,8 @@ private fun AioPlayHomeScreen(
         if (requested != state.selectedSection) return@LaunchedEffect
 
         when (requested) {
-            AioPlaySection.CONTINUE -> {
+            AioPlaySection.CONTINUE,
+            AioPlaySection.LIBRARY -> {
                 if (state.items.isNotEmpty()) {
                     runCatching { firstContentFocus.requestFocus() }
                     pendingSectionFocus = null
@@ -1681,12 +1685,29 @@ private fun AioPlayHomeScreen(
                                         }
                                     }
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AioPlaySectionCard(
+                                text = "Library",
+                                selected = state.selectedSection == AioPlaySection.LIBRARY,
+                                onClick = {
+                                    pendingSectionFocus = AioPlaySection.LIBRARY
+                                    onSection(AioPlaySection.LIBRARY)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(libraryFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "library"
+                                        }
+                                    }
+                            )
                         }
                     }
 
                     Row(
                         modifier = Modifier.align(Alignment.CenterEnd),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (state.capabilities?.vodEnabled == true) {
@@ -1948,7 +1969,7 @@ private fun AioPlayFocusedHeroInfo(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(58.dp)
+.height(86.dp)
     ) {
         if (item == null) return@Box
 
@@ -2063,15 +2084,15 @@ private fun AioPlayFocusedHeroInfo(
 private fun AioPlayMetaChip(text: String) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(Color.Black.copy(alpha = 0.34f))
-            .padding(horizontal = 7.dp, vertical = 3.dp)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 8.sp,
-                lineHeight = 9.sp
+                fontSize = 16.sp,
+                lineHeight = 18.sp
             ),
             color = Color.White.copy(alpha = 0.84f),
             maxLines = 1

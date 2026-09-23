@@ -1126,6 +1126,9 @@ private fun AioPlaySearchScreen(
                     val rowSpacing = 6.dp
                     val columnSpacing = 9.dp
                     val rowHeight = (maxHeight - rowSpacing) / 2
+                    val cardWidth = (maxWidth - (columnSpacing * (columns - 1))) / columns
+                    val posterHeight = cardWidth * 1.5f
+                    val searchCardHeight = minOf(rowHeight, posterHeight + 30.dp)
 
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -1147,8 +1150,8 @@ private fun AioPlaySearchScreen(
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
-                                            .fillMaxHeight(),
-                                        contentAlignment = Alignment.Center
+                                            .height(searchCardHeight),
+                                        contentAlignment = Alignment.TopCenter
                                     ) {
                                         if (item != null) {
                                             val requester =
@@ -1685,6 +1688,20 @@ private fun AioPlayHomeScreen(
                         if (state.capabilities?.vodEnabled == true) {
                             Spacer(modifier = Modifier.width(8.dp))
                             AioPlaySectionCard(
+                                text = "Search",
+                                selected = false,
+                                onClick = { onSearch(focusMemory()) },
+                                modifier = Modifier
+                                    .focusRequester(searchFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "search"
+                                        }
+                                    }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AioPlaySectionCard(
                                 text = "Continue Watching",
                                 selected = state.selectedSection == AioPlaySection.CONTINUE,
                                 onClick = {
@@ -1725,31 +1742,6 @@ private fun AioPlayHomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (state.capabilities?.vodEnabled == true) {
-                            Button(
-                                onClick = { onSearch(focusMemory()) },
-                                modifier = Modifier
-                                    .width(42.dp)
-                                    .focusRequester(searchFocus)
-                                    .onFocusChanged {
-                                        if (it.isFocused) {
-                                            focusZone = AioPlayHomeFocusZone.TOP
-                                            focusedTopKey = "search"
-                                        }
-                                    },
-                                colors = ButtonDefaults.colors(
-                                    containerColor = AioPlayPillIdle,
-                                    focusedContainerColor = AioPlayPillSelected
-                                ),
-                                contentPadding = PaddingValues(0.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Search,
-                                    contentDescription = "Search all movies and series"
-                                )
-                            }
-                        }
-
                         Button(
                             onClick = { onSettings(focusMemory()) },
                             modifier = Modifier
@@ -2036,6 +2028,19 @@ private fun AioPlayHomeScreen(
                         Button(onClick = { contextItem = null; onItem(item) }, modifier = Modifier.fillMaxWidth().focusRequester(contextFirstFocus)) { Text(if ((item.resumePositionMs ?: 0L) > 0L) "Resume / Details" else "Play / Details") }
                         Button(onClick = { onToggleLibrary(item); contextItem = null; pendingContentFocusId = item.id }, modifier = Modifier.fillMaxWidth()) { Text(if (isInLibrary(item)) "Remove from Library" else "Add to Library") }
                         Button(onClick = { onToggleWatched(item); contextItem = null; pendingContentFocusId = item.id }, modifier = Modifier.fillMaxWidth()) { Text(if (isWatched(item)) "Mark Unwatched" else "Mark Watched") }
+                        Button(
+                            onClick = {
+                                contextItem = null
+                                onSearch(
+                                    AioPlayHomeFocusMemory(
+                                        zone = AioPlayHomeFocusZone.CONTENT,
+                                        key = item.id,
+                                        windowStartRow = contentWindowStartRow
+                                    )
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Search") }
                         Button(onClick = { contextItem = null; pendingContentFocusId = item.id }, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
                     }
                 }

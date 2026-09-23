@@ -90,3 +90,13 @@ data class AioPlayMetaDetails(
     val videos: List<AioPlayVideo>,
     val meta: Meta
 )
+
+
+data class AioPlayWatchState(
+    val id: String,
+    val type: String,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val watched: Boolean,
+    val updatedAt: Long = 0L
+)

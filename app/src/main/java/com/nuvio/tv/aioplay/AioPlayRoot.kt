@@ -836,6 +836,374 @@ private fun AioPlaySignedInApp(
 }
 
 @Composable
+private fun AioPlaySearchScreen(
+    viewModel: AioPlayViewModel,
+    restoreResultId: String?,
+    restoreResultToken: Int,
+    onResult: (AioPlayItem) -> Unit,
+    onBack: () -> Unit
+) {
+    BackHandler(onBack = onBack)
+
+    var query by rememberSaveable { mutableStateOf("") }
+    var selectedType by rememberSaveable { mutableStateOf("all") }
+    var results by remember { mutableStateOf<List<AioPlayItem>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var windowStartRow by rememberSaveable { mutableIntStateOf(0) }
+    var pendingFocusId by remember { mutableStateOf<String?>(null) }
+    var pendingHeroItem by remember { mutableStateOf<AioPlayItem?>(null) }
+    var heroItem by remember { mutableStateOf<AioPlayItem?>(null) }
+
+    val queryFocus = remember { FocusRequester() }
+    val resultFocusRequesters = remember(results.map { it.type + "|" + it.id }) {
+        results.associate { item ->
+            (item.type + "|" + item.id) to FocusRequester()
+        }
+    }
+
+    LaunchedEffect(restoreResultToken) {
+        if (restoreResultToken <= 0) {
+            delay(120)
+            runCatching { queryFocus.requestFocus() }
+        }
+    }
+
+    LaunchedEffect(query, selectedType) {
+        val clean = query.trim()
+        if (clean.length < 2) {
+            loading = false
+            error = null
+            results = emptyList()
+            heroItem = null
+            pendingHeroItem = null
+            windowStartRow = 0
+            return@LaunchedEffect
+        }
+
+        delay(320)
+        loading = true
+        error = null
+        val type = selectedType.takeIf { it != "all" }
+        viewModel.searchVod(clean, type)
+            .onSuccess { rows ->
+                results = rows
+                windowStartRow = 0
+                pendingHeroItem = rows.firstOrNull()
+            }
+            .onFailure { throwable ->
+                error = throwable.message ?: "Search is unavailable right now."
+            }
+        loading = false
+    }
+
+    LaunchedEffect(pendingHeroItem?.id, pendingHeroItem?.type) {
+        val target = pendingHeroItem ?: return@LaunchedEffect
+        delay(140)
+        if (
+            pendingHeroItem?.id == target.id &&
+            pendingHeroItem?.type == target.type
+        ) {
+            heroItem = target
+        }
+    }
+
+    LaunchedEffect(heroItem?.id, heroItem?.type) {
+        val target = heroItem ?: return@LaunchedEffect
+        delay(260)
+        if (heroItem?.id == target.id && heroItem?.type == target.type) {
+            viewModel.prefetchVodMeta(target)
+        }
+    }
+
+    LaunchedEffect(
+        restoreResultToken,
+        restoreResultId,
+        results.map { it.id }
+    ) {
+        if (restoreResultToken <= 0 || restoreResultId.isNullOrBlank()) {
+            return@LaunchedEffect
+        }
+        val targetIndex = results.indexOfFirst { it.id == restoreResultId }
+        if (targetIndex < 0) return@LaunchedEffect
+
+        val columns = 6
+        val totalRows = (results.size + columns - 1) / columns
+        val targetRow = targetIndex / columns
+        val maxStart = (totalRows - 2).coerceAtLeast(0)
+        windowStartRow = when {
+            targetRow < windowStartRow -> targetRow
+            targetRow > windowStartRow + 1 -> targetRow - 1
+            else -> windowStartRow
+        }.coerceIn(0, maxStart)
+        pendingFocusId = results[targetIndex].id
+    }
+
+    LaunchedEffect(windowStartRow, pendingFocusId, results) {
+        val targetId = pendingFocusId ?: return@LaunchedEffect
+        val item = results.firstOrNull { it.id == targetId } ?: return@LaunchedEffect
+        runCatching {
+            resultFocusRequesters[item.type + "|" + item.id]?.requestFocus()
+        }
+        pendingFocusId = null
+    }
+
+    val heroArtwork = heroItem?.background ?: heroItem?.poster
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AioPlayBackgroundGradient)
+    ) {
+        Crossfade(
+            targetState = heroArtwork,
+            animationSpec = tween(durationMillis = 280),
+            label = "AIOPlay search hero"
+        ) { artwork ->
+            if (!artwork.isNullOrBlank()) {
+                AsyncImage(
+                    model = artwork,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AioPlayContentDim)
+                .background(AioPlayHeroSideGradient)
+                .background(AioPlayHeroBottomGradient)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 28.dp, vertical = 18.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Search",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioTheme.colors.TextPrimary,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                InputField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = "Search all movies and series",
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Done,
+                    modifier = Modifier
+                        .width(520.dp)
+                        .focusRequester(queryFocus)
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                AioPlaySectionCard(
+                    text = "All",
+                    selected = selectedType == "all",
+                    onClick = { selectedType = "all" }
+                )
+                AioPlaySectionCard(
+                    text = "Movies",
+                    selected = selectedType == "movie",
+                    onClick = { selectedType = "movie" }
+                )
+                AioPlaySectionCard(
+                    text = "Series",
+                    selected = selectedType == "series",
+                    onClick = { selectedType = "series" }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            AioPlayFocusedHeroInfo(
+                item = heroItem ?: results.firstOrNull(),
+                section = AioPlaySection.VOD
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(24.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val statusText = when {
+                    query.trim().length < 2 -> "Type at least two characters"
+                    loading && results.isEmpty() -> "Searching…"
+                    error != null -> error.orEmpty()
+                    results.isEmpty() -> "No matching titles"
+                    else -> results.size.toString() + " results"
+                }
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp
+                    ),
+                    color = if (error != null) {
+                        NuvioTheme.colors.Error
+                    } else {
+                        NuvioTheme.colors.TextSecondary
+                    }
+                )
+                if (loading && results.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .width(12.dp)
+                            .height(12.dp),
+                        strokeWidth = 1.5.dp,
+                        color = AioPlayAccentCyan
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            if (results.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (query.trim().length < 2) {
+                        Text(
+                            text = "Search is global and is not limited to your current catalogs.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = NuvioTheme.colors.TextSecondary
+                        )
+                    } else if (loading) {
+                        AioPlayCatalogSkeleton(posterMode = true)
+                    }
+                }
+            } else {
+                val columns = 6
+                val totalRows = (results.size + columns - 1) / columns
+                val maxStart = (totalRows - 2).coerceAtLeast(0)
+                if (windowStartRow > maxStart) {
+                    windowStartRow = maxStart
+                }
+
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val rowSpacing = 6.dp
+                    val columnSpacing = 9.dp
+                    val rowHeight = (maxHeight - rowSpacing) / 2
+
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(rowSpacing)
+                    ) {
+                        repeat(2) { visibleRow ->
+                            val absoluteRow = windowStartRow + visibleRow
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(rowHeight),
+                                horizontalArrangement = Arrangement.spacedBy(columnSpacing),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                repeat(columns) { column ->
+                                    val itemIndex = absoluteRow * columns + column
+                                    val item = results.getOrNull(itemIndex)
+
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (item != null) {
+                                            val requester =
+                                                resultFocusRequesters[item.type + "|" + item.id]
+                                            AioPlayContentCard(
+                                                item = item,
+                                                section = AioPlaySection.VOD,
+                                                posterMode = true,
+                                                onClick = { onResult(item) },
+                                                modifier = Modifier
+                                                    .then(
+                                                        if (requester != null) {
+                                                            Modifier.focusRequester(requester)
+                                                        } else {
+                                                            Modifier
+                                                        }
+                                                    )
+                                                    .onPreviewKeyEvent { event ->
+                                                        val native = event.nativeKeyEvent
+                                                        if (
+                                                            native.action !=
+                                                            AndroidKeyEvent.ACTION_DOWN
+                                                        ) {
+                                                            return@onPreviewKeyEvent false
+                                                        }
+
+                                                        val direction = when (native.keyCode) {
+                                                            AndroidKeyEvent.KEYCODE_DPAD_DOWN -> 1
+                                                            AndroidKeyEvent.KEYCODE_DPAD_UP -> -1
+                                                            else -> 0
+                                                        }
+                                                        if (direction == 0) {
+                                                            return@onPreviewKeyEvent false
+                                                        }
+
+                                                        val targetRow = absoluteRow + direction
+                                                        if (
+                                                            targetRow < 0 ||
+                                                            targetRow >= totalRows
+                                                        ) {
+                                                            return@onPreviewKeyEvent false
+                                                        }
+
+                                                        val targetRowStart = targetRow * columns
+                                                        val targetIndex = minOf(
+                                                            targetRowStart + column,
+                                                            results.lastIndex
+                                                        )
+                                                        if (targetIndex < targetRowStart) {
+                                                            return@onPreviewKeyEvent false
+                                                        }
+
+                                                        val targetItem = results[targetIndex]
+                                                        windowStartRow = when {
+                                                            targetRow < windowStartRow ->
+                                                                targetRow
+                                                            targetRow > windowStartRow + 1 ->
+                                                                targetRow - 1
+                                                            else ->
+                                                                windowStartRow
+                                                        }.coerceIn(0, maxStart)
+                                                        pendingFocusId = targetItem.id
+                                                        true
+                                                    }
+                                                    .onFocusChanged {
+                                                        if (it.isFocused) {
+                                                            pendingHeroItem = item
+                                                        }
+                                                    }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AioPlayHomeScreen(
     state: AioPlayUiState,
     restoreContentItemId: String?,

@@ -1020,6 +1020,7 @@ private fun AioPlaySearchScreen(
                     placeholder = "Search all movies and series",
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Done,
+                    startEditing = restoreResultToken <= 0,
                     modifier = Modifier
                         .width(520.dp)
                         .focusRequester(queryFocus)

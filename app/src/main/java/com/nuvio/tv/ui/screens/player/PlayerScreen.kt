@@ -2785,71 +2785,109 @@ private fun ControlButton(
     var isFocused by remember { mutableStateOf(false) }
     val clickGate = remember { PlayerClickGate() }
 
-    IconButton(
-        onClick = { if (clickGate.accept()) onClick() },
-        enabled = enabled,
-        modifier = Modifier
-            .size(NuvioTheme.spacing.xxxl)
-            .then(
-                if (focusRequester != null) Modifier.focusRequester(focusRequester)
-                else Modifier
-            )
-            .then(
-                if (upFocusRequester != null || downFocusRequester != null) {
-                    Modifier.focusProperties {
-                        upFocusRequester?.let { up = it }
-                        downFocusRequester?.let { down = it }
-                    }
-                } else {
-                    Modifier
-                }
-            )
-            .onPreviewKeyEvent { keyEvent ->
-                if (keyEvent.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) {
-                    false
-                } else when (keyEvent.nativeKeyEvent.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        if (upFocusRequester != null) {
-                            try { upFocusRequester.requestFocus() } catch (_: Exception) {}
-                            true
-                        } else if (onUpKey != null) { onUpKey.invoke(); true } else false
-                    }
-                    KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        if (downFocusRequester != null) {
-                            try { downFocusRequester.requestFocus() } catch (_: Exception) {}
-                            true
-                        } else if (onDownKey != null) { onDownKey.invoke(); true } else false
-                    }
-                    else -> false
-                }
-            }
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (it.isFocused) onFocused?.invoke()
-            },
-        colors = IconButtonDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = if (BuildConfig.AIOPLAY_MODE) {
-                Color(0xFFD7DEE1)
-            } else {
-                Color.White
-            },
-            contentColor = Color.White,
-            focusedContentColor = Color.Black
-        ),
-        shape = IconButtonDefaults.shape(shape = CircleShape)
+    Box(
+        modifier = Modifier.size(NuvioTheme.spacing.xxxl),
+        contentAlignment = Alignment.Center
     ) {
-        if (iconPainter != null) {
-            Icon(
-                painter = iconPainter,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(NuvioTheme.spacing.xl)
-            )
-        } else {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(28.dp)
+        IconButton(
+            onClick = { if (clickGate.accept()) onClick() },
+            enabled = enabled,
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (focusRequester != null) Modifier.focusRequester(focusRequester)
+                    else Modifier
+                )
+                .then(
+                    if (upFocusRequester != null || downFocusRequester != null) {
+                        Modifier.focusProperties {
+                            upFocusRequester?.let { up = it }
+                            downFocusRequester?.let { down = it }
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
+                .onPreviewKeyEvent { keyEvent ->
+                    if (keyEvent.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) {
+                        false
+                    } else when (keyEvent.nativeKeyEvent.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_UP -> {
+                            if (upFocusRequester != null) {
+                                try { upFocusRequester.requestFocus() } catch (_: Exception) {}
+                                true
+                            } else if (onUpKey != null) {
+                                onUpKey.invoke()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            if (downFocusRequester != null) {
+                                try { downFocusRequester.requestFocus() } catch (_: Exception) {}
+                                true
+                            } else if (onDownKey != null) {
+                                onDownKey.invoke()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        else -> false
+                    }
+                }
+                .onFocusChanged {
+                    isFocused = it.isFocused
+                    if (it.isFocused) onFocused?.invoke()
+                },
+            colors = IconButtonDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = if (BuildConfig.AIOPLAY_MODE) {
+                    Color(0xFFD7DEE1)
+                } else {
+                    Color.White
+                },
+                contentColor = Color.White,
+                focusedContentColor = Color.Black
+            ),
+            shape = IconButtonDefaults.shape(shape = CircleShape)
+        ) {
+            if (iconPainter != null) {
+                Icon(
+                    painter = iconPainter,
+                    contentDescription = contentDescription,
+                    modifier = Modifier.size(NuvioTheme.spacing.xl)
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = BuildConfig.AIOPLAY_MODE && isFocused,
+            enter = fadeIn(animationSpec = tween(90)),
+            exit = fadeOut(animationSpec = tween(90)),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = (-30).dp)
+                .zIndex(4f)
+        ) {
+            Text(
+                text = contentDescription,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                color = Color.White.copy(alpha = 0.92f),
+                maxLines = 1,
+                modifier = Modifier
+                    .background(
+                        Color.Black.copy(alpha = 0.72f),
+                        RoundedCornerShape(6.dp)
+                    )
+                    .padding(horizontal = 7.dp, vertical = 3.dp)
             )
         }
     }

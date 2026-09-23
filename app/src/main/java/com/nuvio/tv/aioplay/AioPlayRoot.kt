@@ -869,7 +869,7 @@ private fun AioPlaySearchScreen(
     var results by remember { mutableStateOf<List<AioPlayItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var windowStartRow by rememberSaveable { mutableIntStateOf(0) }
+    var windowStartRow by rememberSaveable { mutableStateOf(0) }
     var pendingFocusId by remember { mutableStateOf<String?>(null) }
     var pendingHeroItem by remember { mutableStateOf<AioPlayItem?>(null) }
     var heroItem by remember { mutableStateOf<AioPlayItem?>(null) }

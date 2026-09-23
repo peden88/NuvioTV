@@ -342,11 +342,27 @@ private fun AioPlaySignedInApp(
             val restoreContentFocusToken by entry.savedStateHandle
                 .getStateFlow("aioplay_home_restore_focus_token", 0)
                 .collectAsState()
+            val restoreUniversalZone by entry.savedStateHandle
+                .getStateFlow("aioplay_home_memory_zone", "")
+                .collectAsState()
+            val restoreUniversalKey by entry.savedStateHandle
+                .getStateFlow("aioplay_home_memory_key", "")
+                .collectAsState()
+            val restoreUniversalWindowStart by entry.savedStateHandle
+                .getStateFlow("aioplay_home_memory_window_start", 0)
+                .collectAsState()
+            val restoreUniversalFocusToken by entry.savedStateHandle
+                .getStateFlow("aioplay_home_memory_restore_token", 0)
+                .collectAsState()
 
             AioPlayHomeScreen(
                 state = state,
                 restoreContentItemId = restoreContentItemId.takeIf { it.isNotBlank() },
                 restoreContentFocusToken = restoreContentFocusToken,
+                restoreUniversalZone = restoreUniversalZone.takeIf { it.isNotBlank() },
+                restoreUniversalKey = restoreUniversalKey.takeIf { it.isNotBlank() },
+                restoreUniversalWindowStart = restoreUniversalWindowStart,
+                restoreUniversalFocusToken = restoreUniversalFocusToken,
                 onSection = viewModel::selectSection,
                 onCatalog = viewModel::selectCatalog,
                 onItem = { item ->
@@ -392,14 +408,31 @@ private fun AioPlaySignedInApp(
                         }
                     }
                 },
-                onSettings = { navController.navigate(SETTINGS_ROUTE) },
-                onAccount = { navController.navigate(ACCOUNT_ROUTE) }
+                onPrefetch = viewModel::prefetchVodMeta,
+                onSettings = { memory ->
+                    entry.savedStateHandle["aioplay_home_memory_zone"] = memory.zone.name
+                    entry.savedStateHandle["aioplay_home_memory_key"] = memory.key.orEmpty()
+                    entry.savedStateHandle["aioplay_home_memory_window_start"] = memory.windowStartRow
+                    navController.navigate(SETTINGS_ROUTE)
+                },
+                onAccount = { memory ->
+                    entry.savedStateHandle["aioplay_home_memory_zone"] = memory.zone.name
+                    entry.savedStateHandle["aioplay_home_memory_key"] = memory.key.orEmpty()
+                    entry.savedStateHandle["aioplay_home_memory_window_start"] = memory.windowStartRow
+                    navController.navigate(ACCOUNT_ROUTE)
+                }
             )
         }
 
         composable(SETTINGS_ROUTE) {
             PlaybackSettingsScreen(
-                onBackPress = { navController.popBackStack() }
+                onBackPress = {
+                    navController.previousBackStackEntry?.savedStateHandle?.let { homeState ->
+                        val token = homeState.get<Int>("aioplay_home_memory_restore_token") ?: 0
+                        homeState["aioplay_home_memory_restore_token"] = token + 1
+                    }
+                    navController.popBackStack()
+                }
             )
         }
 
@@ -462,7 +495,13 @@ private fun AioPlaySignedInApp(
             AioPlayAccountScreen(
                 user = state.user,
                 vodEnabled = state.capabilities?.vodEnabled == true,
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    navController.previousBackStackEntry?.savedStateHandle?.let { homeState ->
+                        val token = homeState.get<Int>("aioplay_home_memory_restore_token") ?: 0
+                        homeState["aioplay_home_memory_restore_token"] = token + 1
+                    }
+                    navController.popBackStack()
+                },
                 onRefresh = viewModel::refreshCurrentCatalog,
                 onSignOut = viewModel::signOut
             )

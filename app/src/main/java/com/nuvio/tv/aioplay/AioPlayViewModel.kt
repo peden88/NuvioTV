@@ -674,6 +674,13 @@ class AioPlayViewModel @Inject constructor(
         return runCatching { api.heartbeatPlayback(activeToken, sessionId) }
     }
 
+    suspend fun finishPlaybackAndWait(sessionId: String): Result<Unit> {
+        val activeToken = token ?: return Result.failure(
+            AioPlayApiException("Your session has expired.", 403)
+        )
+        return runCatching { api.finishPlayback(activeToken, sessionId) }
+    }
+
     fun finishPlayback(sessionId: String) {
         val activeToken = token ?: return
         viewModelScope.launch {

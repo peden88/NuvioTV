@@ -781,7 +781,10 @@ private fun AioPlaySignedInApp(
             }
 
             PlayerScreen(
-                onBackPress = { _, _, _, _, _ ->
+                onBackPress = { _, _, _, _, playbackCompleted ->
+                    if (playbackCompleted && (fallbackContentType == "movie" || fallbackContentType == "episode")) {
+                        viewModel.setWatched(item, true)
+                    }
                     if (sessionId.isNotBlank()) viewModel.finishPlayback(sessionId)
                     leavePlayer()
                 },
@@ -824,14 +827,14 @@ private fun AioPlaySignedInApp(
                     null
                 },
                 onPlaybackEnded = { nextVideoId, nextSeason, nextEpisode, exitReason ->
-                    val hasNextEpisode = fallbackContentType == "episode" &&
-                        exitReason == null &&
-                        (
-                            !nextVideoId.isNullOrBlank() ||
-                                (nextSeason != null && nextEpisode != null)
-                        )
+                    // PlayerScreen owns completion detection, skip handling and the
+                    // post-play lifecycle. AIOPlay only mirrors the completed state
+                    // to the shared account and resolves the next AIOPlay episode.
+                    if (exitReason == null && (fallbackContentType == "movie" || fallbackContentType == "episode")) {
+                        viewModel.setWatched(item, true)
+                    }
 
-                    if (!hasNextEpisode) {
+                    if (fallbackContentType != "episode" || exitReason != null) {
                         if (sessionId.isNotBlank()) viewModel.finishPlayback(sessionId)
                         leavePlayer()
                     } else {
@@ -839,6 +842,11 @@ private fun AioPlaySignedInApp(
                             if (sessionId.isNotBlank()) {
                                 viewModel.finishPlaybackAndWait(sessionId)
                             }
+                            // Upstream Nuvio can provide its resolved successor. When
+                            // AIOPlay metadata is not in Nuvio's addon repository it
+                            // legitimately cannot, so resolve from the same AIOPlay
+                            // series metadata as a fallback instead of treating null
+                            // as the end of the series.
                             val nextItem = viewModel.resolveNextEpisode(
                                 current = item,
                                 nextVideoId = nextVideoId,

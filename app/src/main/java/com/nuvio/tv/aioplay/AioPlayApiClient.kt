@@ -201,6 +201,42 @@ class AioPlayApiClient @Inject constructor(
         )
     }
 
+    suspend fun library(token: String): List<AioPlayItem> {
+        val json = requestJson("/api/v1/library", token = token)
+        val array = json.optJSONArray("items") ?: return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                parseItem(array.optJSONObject(i), "movie")?.let(::add)
+            }
+        }
+    }
+
+    suspend fun addToLibrary(token: String, item: AioPlayItem): AioPlayItem {
+        val payload = JSONObject()
+            .put("id", item.id)
+            .put("type", item.type)
+            .put("name", item.name)
+            .put("description", item.description ?: JSONObject.NULL)
+            .put("poster", item.poster ?: JSONObject.NULL)
+            .put("background", item.background ?: JSONObject.NULL)
+            .put("logo", item.logo ?: JSONObject.NULL)
+            .put("releaseInfo", item.releaseInfo ?: JSONObject.NULL)
+            .put("imdbRating", item.imdbRating ?: JSONObject.NULL)
+            .put("runtime", item.runtime ?: JSONObject.NULL)
+            .put("genres", JSONArray(item.genres))
+        val json = requestJson("/api/v1/library", method = "PUT", token = token, body = payload)
+        return parseItem(json.optJSONObject("item"), item.type) ?: item
+    }
+
+    suspend fun removeFromLibrary(token: String, item: AioPlayItem) {
+        requestJson(
+            "/api/v1/library/" + encodePath(item.type) + "/" + encodePath(item.id),
+            method = "DELETE",
+            token = token,
+            allowEmpty = true
+        )
+    }
+
     suspend fun logout(token: String) {
         requestJson("/api/v1/auth/logout", method = "POST", token = token, allowEmpty = true)
     }

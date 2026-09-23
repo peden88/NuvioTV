@@ -267,7 +267,8 @@ private fun AioPlayRichDetails(
                     showWatchedAction = !isSeries,
                     onRandomClick = null,
                     trailerAvailable = false,
-                    playButtonFocusRequester = heroFocus
+                    playButtonFocusRequester = heroFocus,
+                    playArtworkRes = com.nuvio.tv.R.drawable.aioplay_movie_play_orb
                 )
             }
 

@@ -1076,7 +1076,10 @@ private fun AioPlayHomeScreen(
                                     else Modifier
                                 )
                                 .onFocusChanged {
-                                    if (it.isFocused) focusZone = AioPlayHomeFocusZone.NAV
+                                    if (it.isFocused) {
+                                        focusZone = AioPlayHomeFocusZone.NAV
+                                        focusedNavKey = catalog.selectionKey
+                                    }
                                 }
                         )
                     }
@@ -1085,10 +1088,15 @@ private fun AioPlayHomeScreen(
                 AioPlayNavCard(
                     text = state.user?.displayName?.ifBlank { state.user.username } ?: "Account",
                     selected = false,
-                    onClick = onAccount,
-                    modifier = Modifier.onFocusChanged {
-                        if (it.isFocused) focusZone = AioPlayHomeFocusZone.NAV
-                    }
+                    onClick = { onAccount(focusMemory()) },
+                    modifier = Modifier
+                        .focusRequester(accountFocus)
+                        .onFocusChanged {
+                            if (it.isFocused) {
+                                focusZone = AioPlayHomeFocusZone.NAV
+                                focusedNavKey = "account"
+                            }
+                        }
                 )
             }
 
@@ -1121,7 +1129,10 @@ private fun AioPlayHomeScreen(
                                 modifier = Modifier
                                     .focusRequester(vodFocus)
                                     .onFocusChanged {
-                                        if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "vod"
+                                        }
                                     }
                             )
                         }
@@ -1139,7 +1150,10 @@ private fun AioPlayHomeScreen(
                                 modifier = Modifier
                                     .focusRequester(liveFocus)
                                     .onFocusChanged {
-                                        if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "live"
+                                        }
                                     }
                             )
                         }
@@ -1155,19 +1169,26 @@ private fun AioPlayHomeScreen(
                                 modifier = Modifier
                                     .focusRequester(continueFocus)
                                     .onFocusChanged {
-                                        if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "continue"
+                                        }
                                     }
                             )
                         }
                     }
 
                     Button(
-                        onClick = onSettings,
+                        onClick = { onSettings(focusMemory()) },
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .width(42.dp)
+                            .focusRequester(settingsFocus)
                             .onFocusChanged {
-                                if (it.isFocused) focusZone = AioPlayHomeFocusZone.TOP
+                                if (it.isFocused) {
+                                    focusZone = AioPlayHomeFocusZone.TOP
+                                    focusedTopKey = "settings"
+                                }
                             },
                         colors = ButtonDefaults.colors(
                             containerColor = AioPlayPillIdle,
@@ -1322,6 +1343,7 @@ private fun AioPlayHomeScreen(
                                                                 if (native.action != AndroidKeyEvent.ACTION_DOWN) {
                                                                     return@onPreviewKeyEvent false
                                                                 }
+                                                                noteRapidNavigation(native)
 
                                                                 val direction = when (native.keyCode) {
                                                                     AndroidKeyEvent.KEYCODE_DPAD_DOWN -> 1
@@ -1363,6 +1385,7 @@ private fun AioPlayHomeScreen(
                                                             .onFocusChanged {
                                                                 if (it.isFocused) {
                                                                     focusZone = AioPlayHomeFocusZone.CONTENT
+                                                                    focusedContentId = item.id
                                                                     pendingHeroItem = item
                                                                 }
                                                             }

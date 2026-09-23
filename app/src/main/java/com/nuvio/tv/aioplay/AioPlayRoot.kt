@@ -2298,6 +2298,8 @@ private fun AioPlayContentCard(
     posterMode: Boolean,
     liveCardHeight: Dp? = null,
     onClick: () -> Unit,
+    inLibrary: Boolean = false,
+    watched: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     if (posterMode) {

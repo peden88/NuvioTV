@@ -624,6 +624,7 @@ private fun AioPlaySignedInApp(
             )
         ) { entry ->
             val args = entry.arguments
+            val playbackScope = rememberCoroutineScope()
             val sessionId = args?.getString("aioplaySessionId").orEmpty()
             val fallbackContentType = args?.getString("aioplayContentType")
                 ?.takeIf { it.isNotBlank() }
@@ -711,9 +712,37 @@ private fun AioPlaySignedInApp(
                         }
                     }
                 },
-                onPlaybackEnded = { _, _, _, _ ->
+                onPlaybackEnded = { nextVideoId, nextSeason, nextEpisode, exitReason ->
                     if (sessionId.isNotBlank()) viewModel.finishPlayback(sessionId)
-                    leavePlayer()
+
+                    val hasNextEpisode = fallbackContentType == "episode" &&
+                        exitReason == null &&
+                        (
+                            !nextVideoId.isNullOrBlank() ||
+                                (nextSeason != null && nextEpisode != null)
+                        )
+
+                    if (!hasNextEpisode) {
+                        leavePlayer()
+                    } else {
+                        playbackScope.launch {
+                            val nextItem = viewModel.resolveNextEpisode(
+                                current = item,
+                                nextVideoId = nextVideoId,
+                                nextSeason = nextSeason,
+                                nextEpisode = nextEpisode
+                            )
+                            if (nextItem == null) {
+                                leavePlayer()
+                            } else {
+                                navController.navigate(
+                                    loadingRoute(nextItem, "episode")
+                                ) {
+                                    popUpTo(DETAIL_ROUTE) { inclusive = false }
+                                }
+                            }
+                        }
+                    }
                 }
             )
         }
@@ -2239,6 +2268,18 @@ private fun AioPlayPlaybackLoadingScreen(
                         .height(24.dp),
                     strokeWidth = 2.dp,
                     color = AioPlayAccentCyan
+                )
+                Text(
+                    text = if (sessionId.isBlank()) {
+                        "Preparing playback"
+                    } else {
+                        "Recovering playback"
+                    },
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp
+                    ),
+                    color = Color.White.copy(alpha = 0.68f)
                 )
             }
         } else {

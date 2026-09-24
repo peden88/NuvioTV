@@ -919,10 +919,17 @@ private fun AioPlaySearchScreen(
         delay(320)
         loading = true
         error = null
-        val type = selectedType.takeIf { it != "all" }
+        val type = selectedType.takeIf { it == "movie" || it == "series" }
         viewModel.searchVod(clean, type)
             .onSuccess { rows ->
-                results = rows
+                results = if (selectedType == "anime") {
+                    rows.filter { item ->
+                        item.genres.any { genre -> genre.equals("anime", ignoreCase = true) } ||
+                            item.type.equals("anime", ignoreCase = true)
+                    }
+                } else {
+                    rows
+                }
                 windowStartRow = 0
                 pendingHeroItem = rows.firstOrNull()
             }
@@ -1033,32 +1040,49 @@ private fun AioPlaySearchScreen(
                 InputField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = "Search all movies and series",
+                    placeholder = "Search all titles",
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Done,
                     startEditing = restoreResultToken <= 0,
                     modifier = Modifier
-                        .width(520.dp)
+                        .width(430.dp)
                         .focusRequester(queryFocus)
                 )
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                AioPlaySectionCard(
-                    text = "All",
-                    selected = selectedType == "all",
-                    onClick = { selectedType = "all" }
-                )
-                AioPlaySectionCard(
-                    text = "Movies",
-                    selected = selectedType == "movie",
-                    onClick = { selectedType = "movie" }
-                )
-                AioPlaySectionCard(
-                    text = "Series",
-                    selected = selectedType == "series",
-                    onClick = { selectedType = "series" }
-                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AioPlaySectionCard(
+                            text = "All",
+                            selected = selectedType == "all",
+                            onClick = { selectedType = "all" },
+                            modifier = Modifier.width(112.dp)
+                        )
+                        AioPlaySectionCard(
+                            text = "Series",
+                            selected = selectedType == "series",
+                            onClick = { selectedType = "series" },
+                            modifier = Modifier.width(112.dp)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AioPlaySectionCard(
+                            text = "Anime",
+                            selected = selectedType == "anime",
+                            onClick = { selectedType = "anime" },
+                            modifier = Modifier.width(112.dp)
+                        )
+                        AioPlaySectionCard(
+                            text = "Movies",
+                            selected = selectedType == "movie",
+                            onClick = { selectedType = "movie" },
+                            modifier = Modifier.width(112.dp)
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1135,8 +1159,9 @@ private fun AioPlaySearchScreen(
                     val columnSpacing = 9.dp
                     val rowHeight = (maxHeight - rowSpacing) / 2
                     val cardWidth = (maxWidth - (columnSpacing * (columns - 1))) / columns
-                    val posterHeight = cardWidth * 1.5f
-                    val searchCardHeight = minOf(rowHeight, posterHeight + 30.dp)
+                    val titleSpace = 24.dp
+                    val posterHeight = minOf(cardWidth * 1.5f, (rowHeight - titleSpace).coerceAtLeast(72.dp))
+                    val searchCardHeight = rowHeight
 
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -1168,6 +1193,7 @@ private fun AioPlaySearchScreen(
                                                 item = item,
                                                 section = AioPlaySection.VOD,
                                                 posterMode = true,
+                                                posterCardHeight = posterHeight,
                                                 onClick = { onResult(item) },
                                                 modifier = Modifier
                                                     .then(
@@ -2338,6 +2364,7 @@ private fun AioPlayContentCard(
     section: AioPlaySection,
     posterMode: Boolean,
     liveCardHeight: Dp? = null,
+    posterCardHeight: Dp? = null,
     onClick: () -> Unit,
     inLibrary: Boolean = false,
     watched: Boolean = false,
@@ -2370,7 +2397,13 @@ private fun AioPlayContentCard(
                 onClick = onClick,
                 modifier = modifier
                     .fillMaxWidth()
-                    .aspectRatio(2f / 3f)
+                    .then(
+                        if (posterCardHeight != null) {
+                            Modifier.height(posterCardHeight)
+                        } else {
+                            Modifier.aspectRatio(2f / 3f)
+                        }
+                    )
                     .onFocusChanged { isFocused = it.isFocused },
                 shape = CardDefaults.shape(shape = shape),
                 colors = CardDefaults.colors(

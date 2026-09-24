@@ -109,6 +109,9 @@ val doviPrebuiltRootPath = resolveProperty(
     "DV7/libdovi"
 )
 val sponsorNames = resolveProperty(devProperties, localProperties, "SPONSOR_NAMES", "ragmehos.")
+val aioPlayApiBaseUrl = providers.environmentVariable("AIOPLAY_API_BASE_URL").orNull
+    ?.trim()?.takeIf { it.isNotBlank() }
+    ?: resolveProperty(devProperties, localProperties, "AIOPLAY_API_BASE_URL")
 
 fun env(name: String): String? = providers.environmentVariable(name).orNull
 
@@ -119,6 +122,10 @@ fun truthy(value: String?): Boolean {
 }
 
 val buildingAppBundle = gradle.startParameter.taskNames.any { it.contains("bundle", ignoreCase = true) }
+val aioplayStreamerOnly = truthy(
+    providers.gradleProperty("aioplayStreamerOnly").orNull
+        ?: env("AIOPLAY_STREAMER_ONLY")
+)
 val useDebugReleaseSigning = env("CI_USE_DEBUG_SIGNING").equals("true", ignoreCase = true)
 val useLocalFfmpegDecoder = truthy(
     providers.gradleProperty("useLocalFfmpegDecoder").orNull
@@ -182,6 +189,7 @@ android {
         buildConfigField("String", "PLAYBACK_REPORTS_BASE_URL", buildConfigString(localProperties.getProperty("PLAYBACK_REPORTS_BASE_URL", "")))
         buildConfigField("String", "PREMIUMIZE_CLIENT_ID", "\"${localProperties.getProperty("PREMIUMIZE_CLIENT_ID", "")}\"")
         buildConfigField("String", "SPONSOR_NAMES", buildConfigString(sponsorNames))
+        buildConfigField("String", "AIOPLAY_API_BASE_URL", buildConfigString(aioPlayApiBaseUrl))
 
         // In-app updater (GitHub Releases)
         buildConfigField("String", "GITHUB_OWNER", "\"Cxsmo-ai\"")
@@ -196,6 +204,7 @@ android {
     productFlavors {
         create("full") {
             dimension = "distribution"
+            buildConfigField("boolean", "AIOPLAY_MODE", "false")
             buildConfigField("boolean", "FEATURE_PLUGINS_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "true")
@@ -204,6 +213,19 @@ android {
             buildConfigField("boolean", "FEATURE_CUSTOM_SERVER_CONNECTIONS_ENABLED", "true")
         }
 
+        create("aioplay") {
+            dimension = "distribution"
+            applicationId = "com.peden88.aioplay"
+            versionNameSuffix = "-aioplay"
+            resValue("string", "app_name", "AIOPlay")
+            buildConfigField("boolean", "AIOPLAY_MODE", "true")
+            buildConfigField("boolean", "FEATURE_PLUGINS_ENABLED", "false")
+            buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "false")
+            buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "false")
+            buildConfigField("boolean", "FEATURE_EXTERNAL_TRAILERS_ENABLED", "false")
+            buildConfigField("boolean", "FEATURE_EXTERNAL_PLAYBACK_KEEP_ALIVE_ENABLED", "false")
+            buildConfigField("boolean", "FEATURE_CUSTOM_SERVER_CONNECTIONS_ENABLED", "false")
+        }
     }
 
     if (enableDoviNative) {
@@ -302,10 +324,17 @@ android {
         abi {
             isEnable = !buildingAppBundle
             reset()
-            include("armeabi-v7a", "arm64-v8a")
-            // Publish one device-agnostic APK alongside the optimized ABI APKs.
-            // The release workflow attaches all of them to the same release.
-            isUniversalApk = true
+            if (aioplayStreamerOnly) {
+                // Dedicated AIOPlay sideload build for the user's Google TV Streamer 4K.
+                // Device testing confirmed the Android userspace accepts 32-bit ARM
+                // (armeabi-v7a) while arm64-v8a is reported incompatible.
+                include("armeabi-v7a")
+                isUniversalApk = false
+            } else {
+                include("armeabi-v7a", "arm64-v8a")
+                // Normal project builds keep the existing device-agnostic APK.
+                isUniversalApk = true
+            }
         }
     }
 
@@ -336,6 +365,13 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
+        }
+        // AIOPlay reuses the mature Nuvio player/runtime. Shared Hilt classes
+        // depend on PluginManager at compile time even though the AIOPlay UI
+        // disables plugin management. Compile against the full runtime source
+        // set so those shared dependencies remain resolvable.
+        getByName("aioplay") {
+            java.srcDir("src/full/java")
         }
     }
 
@@ -391,6 +427,13 @@ baselineProfile {
     }
 }
 
+
+// The AIOPlay variant shares the full runtime implementation required by
+// PlayerViewModel/StreamRepository/Hilt, but its product flags keep plugins,
+// addon management and updater surfaces disabled for users.
+configurations.named("aioplayImplementation") {
+    extendsFrom(configurations.getByName("fullImplementation"))
+}
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")

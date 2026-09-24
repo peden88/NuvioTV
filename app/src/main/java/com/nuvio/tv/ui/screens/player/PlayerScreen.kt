@@ -51,6 +51,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -139,6 +141,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.nuvio.tv.R
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.ui.util.localizeEpisodeTitle
 import com.nuvio.tv.data.local.InternalPlayerEngine
 import com.nuvio.tv.data.local.LibassRenderType
@@ -169,6 +172,7 @@ fun PlayerScreen(
     viewModel: PlayerViewModel = hiltViewModel(),
     onBackPress: (currentVideoId: String?, currentSeason: Int?, currentEpisode: Int?, autoPlayEnabled: Boolean, playbackCompleted: Boolean) -> Unit,
     onPlaybackErrorBack: () -> Unit = { onBackPress(null, null, null, false, false) },
+    onRequestAlternateSource: (() -> Unit)? = null,
     onPlaybackEnded: ((nextVideoId: String?, nextSeason: Int?, nextEpisode: Int?, exitReason: PlayerExitReason?) -> Unit)? = null,
     onPlayRecommendation: (PostPlayRecommendation, manualSelection: Boolean) -> Unit = { _, _ -> },
     onOpenRecommendationDetails: (PostPlayRecommendation) -> Unit = {}
@@ -908,13 +912,15 @@ fun PlayerScreen(
                 uiState.error == null && !postPlayRecommendationState.isVisible,
             backdropUrl = uiState.backdrop,
             logoUrl = uiState.logo,
-            title = uiState.title,
+            title = if (BuildConfig.AIOPLAY_MODE) null else uiState.title,
             message = if (seekrCalibrationActive) {
                 stringResource(R.string.player_loading_preview_sync)
             } else {
                 uiState.loadingMessage.takeIf { uiState.showPlayerLoadingStatus || uiState.isTorrentStream }
             },
-            sourceLine = run {
+            sourceLine = if (BuildConfig.AIOPLAY_MODE) {
+                null
+            } else {
                 val provider = resolveStreamProvider(
                     streamName = uiState.currentStreamName,
                     streamDescription = null,
@@ -926,7 +932,7 @@ fun PlayerScreen(
                     .joinToString(" \u00b7 ")
                     .takeIf { it.isNotBlank() }
             },
-            filename = viewModel.currentFilename,
+            filename = if (BuildConfig.AIOPLAY_MODE) null else viewModel.currentFilename,
             progress = uiState.loadingProgress,
             modifier = Modifier
                 .fillMaxSize()
@@ -1276,6 +1282,15 @@ fun PlayerScreen(
                 onSeekTo = { viewModel.onEvent(PlayerEvent.OnSeekTo(it)) },
                 onShowEpisodesPanel = { viewModel.onEvent(PlayerEvent.OnShowEpisodesPanel) },
                 onShowSourcesPanel = { viewModel.onEvent(PlayerEvent.OnShowSourcesPanel) },
+                onRequestAlternateSource = onRequestAlternateSource?.let { callback ->
+                    {
+                        if (!exitDispatched) {
+                            exitDispatched = true
+                            viewModel.stopAndRelease()
+                            callback()
+                        }
+                    }
+                },
                 onShowAudioDialog = { viewModel.onEvent(PlayerEvent.OnShowAudioOverlay) },
                 onShowSubtitleDialog = { viewModel.onEvent(PlayerEvent.OnShowSubtitleOverlay) },
                 onShowSpeedDialog = { viewModel.onEvent(PlayerEvent.OnShowSpeedDialog) },
@@ -1343,7 +1358,7 @@ fun PlayerScreen(
         }
 
         AnimatedVisibility(
-            visible = uiState.showStreamSourceIndicator,
+            visible = !BuildConfig.AIOPLAY_MODE && uiState.showStreamSourceIndicator,
             enter = fadeIn(animationSpec = tween(NuvioMotion.tokens.durations.fast)),
             exit = fadeOut(animationSpec = tween(NuvioMotion.tokens.durations.fast)),
             modifier = Modifier
@@ -1481,7 +1496,7 @@ fun PlayerScreen(
 
         // Sources panel scrim
         AnimatedVisibility(
-            visible = uiState.showSourcesPanel && uiState.error == null,
+            visible = !BuildConfig.AIOPLAY_MODE && uiState.showSourcesPanel && uiState.error == null,
             enter = fadeIn(animationSpec = tween(120)),
             exit = fadeOut(animationSpec = tween(120))
 ) {
@@ -1494,7 +1509,7 @@ fun PlayerScreen(
 
         // Sources panel (slides in from right)
         AnimatedVisibility(
-            visible = uiState.showSourcesPanel && uiState.error == null,
+            visible = !BuildConfig.AIOPLAY_MODE && uiState.showSourcesPanel && uiState.error == null,
             enter = slideInHorizontally(
                 animationSpec = tween(220),
                 initialOffsetX = { it }
@@ -2076,6 +2091,7 @@ private fun PlayerControlsOverlay(
     onSeekTo: (Long) -> Unit,
     onShowEpisodesPanel: () -> Unit,
     onShowSourcesPanel: () -> Unit,
+    onRequestAlternateSource: (() -> Unit)? = null,
     onShowAudioDialog: () -> Unit,
     onShowSubtitleDialog: () -> Unit,
     onShowSpeedDialog: () -> Unit,
@@ -2114,6 +2130,13 @@ private fun PlayerControlsOverlay(
     val letterboxActive = bandDp != null && bandDp >= 64.dp &&
         uiState.resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT
     var belowBarHeightPx by remember { mutableStateOf(0) }
+    val hudTimeline by viewModel.playbackTimeline.collectAsState()
+    val hudRemainingMs = (hudTimeline.duration - hudTimeline.currentPosition)
+        .coerceAtLeast(0L)
+    val showAioPlayNextUp = BuildConfig.AIOPLAY_MODE &&
+        hudTimeline.duration > 0L &&
+        hudRemainingMs in 1L..(5L * 60L * 1000L) &&
+        uiState.nextEpisode?.hasAired == true
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Top gradient
@@ -2148,10 +2171,28 @@ private fun PlayerControlsOverlay(
                     if (bytes >= 1_073_741_824L) "%.1f GB".format(bytes / 1_073_741_824.0)
                     else "%.0f MB".format(bytes / 1_048_576.0)
                 }
+                val videoCodecChip = info.videoCodec
+                    ?.takeIf { it.isNotBlank() }
+                    ?.uppercase(Locale.US)
+                val frameRateChip = info.videoFrameRate
+                    ?.takeIf { it > 0f }
+                    ?.let { rate ->
+                        val rounded = kotlin.math.round(rate)
+                        if (kotlin.math.abs(rate - rounded) < 0.05f) {
+                            rounded.toInt().toString() + " FPS"
+                        } else {
+                            String.format(Locale.US, "%.2f FPS", rate)
+                        }
+                    }
                 val audioChip = info.audioCodec?.let { codec ->
                     info.audioChannels?.let { ch -> "$codec $ch" } ?: codec
                 }
-                listOfNotNull(resChip, sizeChip, audioChip).forEach { label ->
+                val chipLabels = if (BuildConfig.AIOPLAY_MODE) {
+                    listOfNotNull(resChip, videoCodecChip, frameRateChip, audioChip)
+                } else {
+                    listOfNotNull(resChip, sizeChip, audioChip)
+                }
+                chipLabels.forEach { label ->
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(999.dp))
@@ -2278,6 +2319,40 @@ private fun PlayerControlsOverlay(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                    } else if (
+                        BuildConfig.AIOPLAY_MODE &&
+                        !uiState.releaseYear.isNullOrBlank()
+                    ) {
+                        Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
+                        Text(
+                            text = uiState.releaseYear.orEmpty(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.72f),
+                            maxLines = 1
+                        )
+                    }
+
+                    if (showAioPlayNextUp) {
+                        uiState.nextEpisode?.let { next ->
+                            Spacer(modifier = Modifier.height(NuvioTheme.spacing.sm))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.Black.copy(alpha = 0.42f))
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = "NEXT  ·  S" +
+                                        next.season.toString().padStart(2, '0') +
+                                        "E" + next.episode.toString().padStart(2, '0') +
+                                        "  ·  " + next.title,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White.copy(alpha = 0.86f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -2306,6 +2381,7 @@ private fun PlayerControlsOverlay(
                         if (hasAudioControl) {
                         ControlButton(
                             icon = Icons.Default.Speaker,
+                            iconPainter = if (BuildConfig.AIOPLAY_MODE) customAudioPainter else null,
                             contentDescription = stringResource(R.string.cd_audio_tracks),
                             onClick = onShowAudioDialog,
                             downFocusRequester = progressBarFocusRequester,
@@ -2316,6 +2392,7 @@ private fun PlayerControlsOverlay(
                         if (hasSubtitleControl) {
                         ControlButton(
                             icon = Icons.Default.Chat,
+                            iconPainter = if (BuildConfig.AIOPLAY_MODE) customSubtitlePainter else null,
                             contentDescription = stringResource(R.string.cd_subtitles),
                             onClick = onShowSubtitleDialog,
                             downFocusRequester = progressBarFocusRequester,
@@ -2323,14 +2400,26 @@ private fun PlayerControlsOverlay(
                             onFocused = onResetHideTimer
                         )
                         }
-                        ControlButton(
-                            icon = Icons.Default.Cloud,
-                            contentDescription = stringResource(R.string.cd_sources),
-                            onClick = onShowSourcesPanel,
-                            downFocusRequester = progressBarFocusRequester,
-                            onUpKey = onHideControls,
-                            onFocused = onResetHideTimer
-                        )
+                        if (!BuildConfig.AIOPLAY_MODE) {
+                            ControlButton(
+                                icon = Icons.Default.Cloud,
+                                contentDescription = stringResource(R.string.cd_sources),
+                                onClick = onShowSourcesPanel,
+                                downFocusRequester = progressBarFocusRequester,
+                                onUpKey = onHideControls,
+                                onFocused = onResetHideTimer
+                            )
+                        } else if (onRequestAlternateSource != null) {
+                            ControlButton(
+                                icon = Icons.Default.Cloud,
+                                iconPainter = customSourcePainter,
+                                contentDescription = "Switch source",
+                                onClick = onRequestAlternateSource,
+                                downFocusRequester = progressBarFocusRequester,
+                                onUpKey = onHideControls,
+                                onFocused = onResetHideTimer
+                            )
+                        }
                         AnimatedVisibility(
                             visible = uiState.showMoreDialog,
                             enter = slideInHorizontally(
@@ -2698,67 +2787,111 @@ private fun ControlButton(
     var isFocused by remember { mutableStateOf(false) }
     val clickGate = remember { PlayerClickGate() }
 
-    IconButton(
-        onClick = { if (clickGate.accept()) onClick() },
-        enabled = enabled,
-        modifier = Modifier
-            .size(NuvioTheme.spacing.xxxl)
-            .then(
-                if (focusRequester != null) Modifier.focusRequester(focusRequester)
-                else Modifier
-            )
-            .then(
-                if (upFocusRequester != null || downFocusRequester != null) {
-                    Modifier.focusProperties {
-                        upFocusRequester?.let { up = it }
-                        downFocusRequester?.let { down = it }
-                    }
-                } else {
-                    Modifier
-                }
-            )
-            .onPreviewKeyEvent { keyEvent ->
-                if (keyEvent.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) {
-                    false
-                } else when (keyEvent.nativeKeyEvent.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        if (upFocusRequester != null) {
-                            try { upFocusRequester.requestFocus() } catch (_: Exception) {}
-                            true
-                        } else if (onUpKey != null) { onUpKey.invoke(); true } else false
-                    }
-                    KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        if (downFocusRequester != null) {
-                            try { downFocusRequester.requestFocus() } catch (_: Exception) {}
-                            true
-                        } else if (onDownKey != null) { onDownKey.invoke(); true } else false
-                    }
-                    else -> false
-                }
-            }
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (it.isFocused) onFocused?.invoke()
-            },
-        colors = IconButtonDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.White,
-            contentColor = Color.White,
-            focusedContentColor = Color.Black
-        ),
-        shape = IconButtonDefaults.shape(shape = CircleShape)
+    Box(
+        modifier = Modifier.size(NuvioTheme.spacing.xxxl),
+        contentAlignment = Alignment.Center
     ) {
-        if (iconPainter != null) {
-            Icon(
-                painter = iconPainter,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(NuvioTheme.spacing.xl)
-            )
-        } else {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(28.dp)
+        IconButton(
+            onClick = { if (clickGate.accept()) onClick() },
+            enabled = enabled,
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (focusRequester != null) Modifier.focusRequester(focusRequester)
+                    else Modifier
+                )
+                .then(
+                    if (upFocusRequester != null || downFocusRequester != null) {
+                        Modifier.focusProperties {
+                            upFocusRequester?.let { up = it }
+                            downFocusRequester?.let { down = it }
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
+                .onPreviewKeyEvent { keyEvent ->
+                    if (keyEvent.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) {
+                        false
+                    } else when (keyEvent.nativeKeyEvent.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_UP -> {
+                            if (upFocusRequester != null) {
+                                try { upFocusRequester.requestFocus() } catch (_: Exception) {}
+                                true
+                            } else if (onUpKey != null) {
+                                onUpKey.invoke()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            if (downFocusRequester != null) {
+                                try { downFocusRequester.requestFocus() } catch (_: Exception) {}
+                                true
+                            } else if (onDownKey != null) {
+                                onDownKey.invoke()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        else -> false
+                    }
+                }
+                .onFocusChanged {
+                    isFocused = it.isFocused
+                    if (it.isFocused) onFocused?.invoke()
+                },
+            colors = IconButtonDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = if (BuildConfig.AIOPLAY_MODE) {
+                    Color(0xFFD7DEE1)
+                } else {
+                    Color.White
+                },
+                contentColor = Color.White,
+                focusedContentColor = Color.Black
+            ),
+            shape = IconButtonDefaults.shape(shape = CircleShape)
+        ) {
+            if (iconPainter != null) {
+                Icon(
+                    painter = iconPainter,
+                    contentDescription = contentDescription,
+                    modifier = Modifier.size(NuvioTheme.spacing.xl)
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = BuildConfig.AIOPLAY_MODE && isFocused,
+            enter = fadeIn(animationSpec = tween(90)),
+            exit = fadeOut(animationSpec = tween(90)),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = (-30).dp)
+                .wrapContentSize(unbounded = true)
+                .widthIn(max = 150.dp)
+                .zIndex(4f)
+        ) {
+            Text(
+                text = contentDescription,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                color = Color.White.copy(alpha = 0.92f),
+                maxLines = 1,
+                modifier = Modifier
+                    .background(
+                        Color.Black.copy(alpha = 0.72f),
+                        RoundedCornerShape(6.dp)
+                    )
+                    .padding(horizontal = 7.dp, vertical = 3.dp)
             )
         }
     }

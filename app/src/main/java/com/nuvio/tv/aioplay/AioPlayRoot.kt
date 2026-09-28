@@ -384,7 +384,7 @@ private fun AioPlaySignedInApp(
                             }
                             navController.navigate(loadingRoute(item, contentType))
                         }
-                        AioPlaySection.VOD -> {
+                        AioPlaySection.VOD, AioPlaySection.COLLECTIONS -> {
                             navController.navigate(detailRoute(item))
                         }
                         AioPlaySection.CONTINUE -> {
@@ -1291,6 +1291,7 @@ private fun AioPlayHomeScreen(
 ) {
     val liveFocus = remember { FocusRequester() }
     val vodFocus = remember { FocusRequester() }
+    val collectionsFocus = remember { FocusRequester() }
     val continueFocus = remember { FocusRequester() }
     val libraryFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
@@ -1345,6 +1346,7 @@ private fun AioPlayHomeScreen(
     fun selectedTopRequester(): FocusRequester = when (state.selectedSection) {
         AioPlaySection.LIVE -> liveFocus
         AioPlaySection.VOD -> vodFocus
+        AioPlaySection.COLLECTIONS -> collectionsFocus
         AioPlaySection.CONTINUE -> continueFocus
         AioPlaySection.LIBRARY -> libraryFocus
     }
@@ -1403,7 +1405,8 @@ private fun AioPlayHomeScreen(
 
         when (requested) {
             AioPlaySection.CONTINUE,
-            AioPlaySection.LIBRARY -> {
+            AioPlaySection.LIBRARY,
+            AioPlaySection.COLLECTIONS -> {
                 if (state.items.isNotEmpty()) {
                     runCatching { firstContentFocus.requestFocus() }
                     pendingSectionFocus = null
@@ -1469,6 +1472,7 @@ private fun AioPlayHomeScreen(
                     "settings" -> settingsFocus
                     "live" -> liveFocus
                     "vod" -> vodFocus
+                    "collections" -> collectionsFocus
                     "continue" -> continueFocus
                     "library" -> libraryFocus
                     else -> selectedTopRequester()
@@ -1720,6 +1724,23 @@ private fun AioPlayHomeScreen(
                             )
                         }
                         if (state.capabilities?.vodEnabled == true) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AioPlaySectionCard(
+                                text = "Collections",
+                                selected = state.selectedSection == AioPlaySection.COLLECTIONS,
+                                onClick = {
+                                    pendingSectionFocus = AioPlaySection.COLLECTIONS
+                                    onSection(AioPlaySection.COLLECTIONS)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(collectionsFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "collections"
+                                        }
+                                    }
+                            )
                             Spacer(modifier = Modifier.width(8.dp))
                             AioPlaySectionCard(
                                 text = "Search",

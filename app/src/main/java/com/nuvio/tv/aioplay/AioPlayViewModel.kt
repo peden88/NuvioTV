@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 enum class AioPlaySection(val label: String) {
     LIVE("Live"),
     VOD("VOD"),
+    COLLECTIONS("Collections"),
     CONTINUE("Continue Watching"),
     LIBRARY("Library")
 }
@@ -33,6 +34,8 @@ data class AioPlayUiState(
     val catalogs: List<AioPlayCatalog> = emptyList(),
     val selectedCatalogId: String? = null,
     val items: List<AioPlayItem> = emptyList(),
+    val collections: List<AioPlayCollection> = emptyList(),
+    val selectedCollectionFolder: AioPlayCollectionFolder? = null,
     val loadingCatalog: Boolean = false,
     val accountStateRevision: Int = 0,
     val error: String? = null
@@ -383,6 +386,7 @@ class AioPlayViewModel @Inject constructor(
     private fun catalogsFor(section: AioPlaySection): List<AioPlayCatalog> = when (section) {
         AioPlaySection.LIVE -> liveCatalogs
         AioPlaySection.VOD -> vodCatalogs
+        AioPlaySection.COLLECTIONS -> emptyList()
         AioPlaySection.CONTINUE -> listOf(continueWatchingCatalog)
         AioPlaySection.LIBRARY -> listOf(libraryCatalog)
     }
@@ -395,6 +399,22 @@ class AioPlayViewModel @Inject constructor(
                 catalogs.firstOrNull { it.id == "nuvio_sports_live" } ?: catalogs.firstOrNull()
             } else {
                 catalogs.firstOrNull()
+            }
+
+            if (section == AioPlaySection.COLLECTIONS) {
+                val activeToken = token
+                val collections = if (activeToken != null) runCatching { api.collections(activeToken) }.getOrDefault(emptyList()) else emptyList()
+                _state.value = _state.value.copy(
+                    selectedSection = section,
+                    catalogs = emptyList(),
+                    selectedCatalogId = null,
+                    items = emptyList(),
+                    collections = collections,
+                    selectedCollectionFolder = null,
+                    loadingCatalog = false,
+                    error = if (collections.isEmpty()) "No collections are available yet." else null
+                )
+                return@launch
             }
 
             if (section == AioPlaySection.CONTINUE) {
@@ -441,6 +461,21 @@ class AioPlayViewModel @Inject constructor(
 
             if (preferred != null) loadCatalogInternal(preferred)
         }
+    }
+
+
+    fun openCollectionFolder(folder: AioPlayCollectionFolder) {
+        val activeToken = token ?: return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(selectedCollectionFolder = folder, loadingCatalog = true, error = null)
+            runCatching { api.collectionFolder(activeToken, folder.id) }
+                .onSuccess { items -> _state.value = _state.value.copy(items = items, loadingCatalog = false, error = null) }
+                .onFailure { error -> _state.value = _state.value.copy(items = emptyList(), loadingCatalog = false, error = error.message ?: "Collection could not be loaded.") }
+        }
+    }
+
+    fun closeCollectionFolder() {
+        _state.value = _state.value.copy(selectedCollectionFolder = null, items = emptyList(), error = null)
     }
 
     fun isWatched(item: AioPlayItem): Boolean {

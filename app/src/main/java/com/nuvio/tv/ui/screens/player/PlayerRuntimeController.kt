@@ -712,6 +712,9 @@ class PlayerRuntimeController(
     // URLs proven dead this session (sniff failure on a non-media body, or HTTP
     // 404/410): auto-failover skips them and the source panel greys them out.
     internal val deadSourceStreamUrls: MutableSet<String> = mutableSetOf()
+    // AIOPlay keeps failed AIOStreams result identities for the whole playback session.
+    // Resolved debrid URLs may rotate, so URL-only blacklisting is insufficient.
+    internal val deadSourceStreamKeys: MutableSet<String> = mutableSetOf()
     internal var deadSourceFailoverCount: Int = 0
     internal var hasRetriedAfterMimeOverrideClear: Boolean = false
     internal var isMapDv7ToHevcActiveForCurrentPlayback: Boolean = false

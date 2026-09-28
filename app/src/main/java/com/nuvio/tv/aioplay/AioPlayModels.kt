@@ -100,3 +100,21 @@ data class AioPlayWatchState(
     val watched: Boolean,
     val updatedAt: Long = 0L
 )
+
+
+data class AioPlayCollectionFolder(
+    val id: String,
+    val name: String,
+    val coverImageUrl: String?,
+    val heroBackdropUrl: String?,
+    val focusGifUrl: String?,
+    val focusGifEnabled: Boolean,
+    val tileShape: String,
+    val hideTitle: Boolean
+)
+
+data class AioPlayCollection(
+    val id: String,
+    val name: String,
+    val folders: List<AioPlayCollectionFolder>
+)

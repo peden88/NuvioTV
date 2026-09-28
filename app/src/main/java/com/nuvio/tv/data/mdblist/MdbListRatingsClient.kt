@@ -20,8 +20,6 @@ sealed interface MdbListRatingsCredential {
 @Singleton
 class MdbListRatingsClient @Inject constructor(
     private val api: MDBListApi,
-    private val accountApi: MdbListApiClient,
-    private val authStore: MdbListAuthStore,
     moshi: Moshi
 ) {
     private val mediaAdapter = moshi.adapter(MDBListMediaResponseDto::class.java)
@@ -30,15 +28,10 @@ class MdbListRatingsClient @Inject constructor(
     )
     private val requestAdapter = moshi.adapter(MDBListMediaRequestDto::class.java)
 
-    fun credential(apiKey: String): MdbListRatingsCredential? {
-        apiKey.trim().takeIf { it.isNotEmpty() }?.let { return MdbListRatingsCredential.ApiKey(it) }
-        val state = authStore.state.value
-        return if (state.isAuthenticated) MdbListRatingsCredential.Account(state.scope) else null
-    }
+    fun credential(apiKey: String): MdbListRatingsCredential? =
+        apiKey.trim().takeIf { it.isNotEmpty() }?.let(MdbListRatingsCredential::ApiKey)
 
-    fun checkCredential(credential: MdbListRatingsCredential) {
-        if (credential is MdbListRatingsCredential.Account) authStore.checkScope(credential.scope)
-    }
+    fun checkCredential(credential: MdbListRatingsCredential) = Unit
 
     suspend fun getMedia(
         mediaType: String,
@@ -46,13 +39,7 @@ class MdbListRatingsClient @Inject constructor(
         credential: MdbListRatingsCredential
     ): MDBListMediaResponseDto? = when (credential) {
         is MdbListRatingsCredential.ApiKey -> api.getMedia(mediaType, imdbId, credential.value).bodyOrThrow()
-        is MdbListRatingsCredential.Account -> mediaAdapter.fromJson(
-            accountApi.get(
-                "/imdb/$mediaType/$imdbId/",
-                query = mapOf("append_to_response" to "keyword"),
-                scope = credential.scope
-            ).body
-        )
+        is MdbListRatingsCredential.Account -> null
     }
 
     suspend fun getMediaBatch(
@@ -63,13 +50,7 @@ class MdbListRatingsClient @Inject constructor(
         val body = MDBListMediaRequestDto(imdbIds)
         return when (credential) {
             is MdbListRatingsCredential.ApiKey -> api.getMediaBatch(mediaType, credential.value, body).bodyOrThrow()
-            is MdbListRatingsCredential.Account -> batchAdapter.fromJson(
-                accountApi.post(
-                    "/imdb/$mediaType/",
-                    body = requestAdapter.toJson(body),
-                    scope = credential.scope
-                ).body
-            )
+            is MdbListRatingsCredential.Account -> null
         }
     }
 

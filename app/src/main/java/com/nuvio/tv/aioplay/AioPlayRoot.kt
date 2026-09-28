@@ -1306,6 +1306,18 @@ private fun AioPlayHomeScreen(
         )
         return
     }
+    if (state.selectedSection == AioPlaySection.CONTINUE || state.selectedSection == AioPlaySection.LIBRARY) {
+        AioPlayFullWidthLibraryScreen(
+            state = state,
+            onSection = onSection,
+            onItem = onItem,
+            onSearch = { onSearch(AioPlayHomeFocusMemory(AioPlayHomeFocusZone.TOP, state.selectedSection.name.lowercase(), 0)) },
+            onSettings = { onSettings(AioPlayHomeFocusMemory(AioPlayHomeFocusZone.TOP, state.selectedSection.name.lowercase(), 0)) },
+            isInLibrary = isInLibrary,
+            isWatched = isWatched
+        )
+        return
+    }
 
     val liveFocus = remember { FocusRequester() }
     val vodFocus = remember { FocusRequester() }
@@ -3122,6 +3134,83 @@ private fun AioPlayCenteredStatus(text: String) {
     }
 }
 
+
+@Composable
+private fun AioPlayFullWidthLibraryScreen(
+    state: AioPlayUiState,
+    onSection: (AioPlaySection) -> Unit,
+    onItem: (AioPlayItem) -> Unit,
+    onSearch: () -> Unit,
+    onSettings: () -> Unit,
+    isInLibrary: (AioPlayItem) -> Boolean,
+    isWatched: (AioPlayItem) -> Boolean
+) {
+    val title = if (state.selectedSection == AioPlaySection.CONTINUE) "Continue Watching" else "Library"
+    Box(Modifier.fillMaxSize().background(AioPlayBackgroundGradient)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 38.dp, vertical = 22.dp)) {
+            AioPlaySharedTopBar(state.selectedSection, onSection, onSearch, onSettings)
+            Spacer(Modifier.height(20.dp))
+            Text(title, style=MaterialTheme.typography.headlineMedium, color=NuvioTheme.colors.TextPrimary, fontWeight=FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+            when {
+                state.loadingCatalog && state.items.isEmpty() -> AioPlayCatalogSkeleton(posterMode=true)
+                state.items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) {
+                    Text(state.error ?: if (state.selectedSection == AioPlaySection.CONTINUE) "Nothing to continue watching yet." else "Your library is empty.", color=NuvioTheme.colors.TextSecondary)
+                }
+                else -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp), contentPadding=PaddingValues(bottom=28.dp)) {
+                    items(state.items.chunked(6)) { row ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                            row.forEach { item ->
+                                Box(Modifier.weight(1f)) {
+                                    AioPlayContentCard(
+                                        item=item,
+                                        section=state.selectedSection,
+                                        posterMode=true,
+                                        onClick={onItem(item)},
+                                        inLibrary=isInLibrary(item),
+                                        watched=isWatched(item)
+                                    )
+                                }
+                            }
+                            repeat(6-row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlaySharedTopBar(
+    selected: AioPlaySection,
+    onSection: (AioPlaySection) -> Unit,
+    onSearch: () -> Unit,
+    onSettings: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp))
+            .background(Brush.verticalGradient(listOf(Color.White.copy(alpha=.16f), Color.White.copy(alpha=.055f))))
+            .padding(horizontal=8.dp, vertical=5.dp),
+        verticalAlignment=Alignment.CenterVertically
+    ) {
+        listOf(
+            AioPlaySection.VOD to "VOD",
+            AioPlaySection.COLLECTIONS to "Collections",
+            AioPlaySection.CONTINUE to "Continue Watching",
+            AioPlaySection.LIBRARY to "Library"
+        ).forEachIndexed { index, pair ->
+            if(index>0) Spacer(Modifier.width(6.dp))
+            AioPlaySectionCard(pair.second, selected==pair.first, {onSection(pair.first)})
+        }
+        Spacer(Modifier.width(6.dp))
+        AioPlaySectionCard("Search", false, onSearch)
+        Spacer(Modifier.weight(1f))
+        Button(onClick=onSettings, colors=ButtonDefaults.colors(containerColor=Color.Transparent, focusedContainerColor=Color.White.copy(alpha=.28f))) {
+            Icon(Icons.Default.Settings, contentDescription="Settings")
+        }
+    }
+}
 
 @Composable
 private fun AioPlayCollectionsScreen(

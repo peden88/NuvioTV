@@ -3236,30 +3236,26 @@ private fun AioPlayCollectionsScreen(
     onSettings: () -> Unit
 ) {
     val firstFocus = remember { FocusRequester() }
+    var focusedFolder by remember { mutableStateOf<AioPlayCollectionFolder?>(null) }
+    var lastFolderId by rememberSaveable { mutableStateOf<String?>(null) }
+    val folderRequesters = remember(state.collections) {
+        state.collections.flatMap { it.folders }.associate { it.id to FocusRequester() }
+    }
     BackHandler(enabled = state.selectedCollectionFolder != null) { onBackFolder() }
+    LaunchedEffect(state.selectedCollectionFolder) {
+        if (state.selectedCollectionFolder == null && lastFolderId != null) {
+            delay(120)
+            runCatching { folderRequesters[lastFolderId]?.requestFocus() }
+        }
+    }
+    val heroArtwork = focusedFolder?.heroBackdropUrl ?: focusedFolder?.coverImageUrl
     Box(Modifier.fillMaxSize().background(AioPlayBackgroundGradient)) {
+        Crossfade(targetState=heroArtwork, animationSpec=tween(260), label="Collection backdrop") { artwork ->
+            if (!artwork.isNullOrBlank()) AsyncImage(model=artwork, contentDescription=null, modifier=Modifier.fillMaxSize(), contentScale=ContentScale.Crop)
+        }
+        Box(Modifier.fillMaxSize().background(AioPlayContentDim).background(AioPlayHeroSideGradient).background(AioPlayHeroBottomGradient))
         Column(Modifier.fillMaxSize().padding(horizontal = 38.dp, vertical = 22.dp)) {
-            Row(
-                Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp)).background(Brush.verticalGradient(listOf(Color.White.copy(alpha=.16f), Color.White.copy(alpha=.055f)))).padding(horizontal=8.dp, vertical=5.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                listOf(
-                    AioPlaySection.VOD to "VOD",
-                    AioPlaySection.COLLECTIONS to "Collections",
-                    AioPlaySection.CONTINUE to "Continue Watching",
-                    AioPlaySection.LIBRARY to "Library"
-                ).forEachIndexed { index, pair ->
-                    if (index > 0) Spacer(Modifier.width(8.dp))
-                    AioPlaySectionCard(pair.second, state.selectedSection == pair.first, { onSection(pair.first) })
-                }
-                Spacer(Modifier.width(8.dp))
-                AioPlaySectionCard("Search", false, onSearch)
-                Spacer(Modifier.weight(1f))
-                Button(onClick = onSettings, colors = ButtonDefaults.colors(containerColor=AioPlayPillIdle, focusedContainerColor=AioPlayPillSelected)) {
-                    Icon(Icons.Default.Settings, contentDescription="Settings")
-                }
-            }
+            AioPlaySharedTopBar(AioPlaySection.COLLECTIONS, onSection, onSearch, onSettings)
             Spacer(Modifier.height(18.dp))
             val folder = state.selectedCollectionFolder
             if (folder != null) {
@@ -3273,6 +3269,9 @@ private fun AioPlayCollectionsScreen(
                 else AioPlayCollectionTitleGrid(state.items, onItem, firstFocus)
             } else {
                 Text("Collections", style=MaterialTheme.typography.headlineMedium, color=NuvioTheme.colors.TextPrimary, fontWeight=FontWeight.Bold)
+                focusedFolder?.takeIf { !it.hideTitle }?.let {
+                    Text(it.name, style=MaterialTheme.typography.bodyMedium, color=NuvioTheme.colors.TextSecondary, maxLines=1, overflow=TextOverflow.Ellipsis)
+                }
                 Spacer(Modifier.height(12.dp))
                 if (state.collections.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) { Text(state.error ?: "No collections are available.", color=NuvioTheme.colors.TextSecondary) }
@@ -3283,7 +3282,14 @@ private fun AioPlayCollectionsScreen(
                                 Text(collection.name, style=MaterialTheme.typography.titleLarge, color=NuvioTheme.colors.TextPrimary, fontWeight=FontWeight.SemiBold)
                                 Spacer(Modifier.height(8.dp))
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    items(collection.folders, key={it.id}) { item -> AioPlayCollectionFolderCard(item, { onFolder(item) }) }
+                                    items(collection.folders, key={it.id}) { item ->
+                                        AioPlayCollectionFolderCard(
+                                            folder=item,
+                                            onClick={ lastFolderId=item.id; onFolder(item) },
+                                            onFocused={ focusedFolder=item },
+                                            modifier=Modifier.then(folderRequesters[item.id]?.let { Modifier.focusRequester(it) } ?: Modifier)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -3295,11 +3301,22 @@ private fun AioPlayCollectionsScreen(
 }
 
 @Composable
-private fun AioPlayCollectionFolderCard(folder: AioPlayCollectionFolder, onClick: () -> Unit) {
+private fun AioPlayCollectionFolderCard(
+    folder: AioPlayCollectionFolder,
+    onClick: () -> Unit,
+    onFocused: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val landscape = folder.tileShape.equals("LANDSCAPE", true)
-    Card(onClick=onClick, modifier=Modifier.width(if(landscape) 250.dp else 142.dp).height(if(landscape) 142.dp else 210.dp), shape=CardDefaults.shape(RoundedCornerShape(12.dp))) {
+    var focused by remember { mutableStateOf(false) }
+    val artwork = if (focused && folder.focusGifEnabled && !folder.focusGifUrl.isNullOrBlank()) folder.focusGifUrl else folder.coverImageUrl ?: folder.heroBackdropUrl
+    Card(
+        onClick=onClick,
+        modifier=modifier.width(if(landscape) 250.dp else 142.dp).height(if(landscape) 142.dp else 210.dp).onFocusChanged { state -> focused=state.isFocused; if(state.isFocused) onFocused() },
+        shape=CardDefaults.shape(RoundedCornerShape(12.dp))
+    ) {
         Box(Modifier.fillMaxSize()) {
-            AsyncImage(model=folder.coverImageUrl ?: folder.heroBackdropUrl, contentDescription=folder.name, modifier=Modifier.fillMaxSize(), contentScale=ContentScale.Crop)
+            AsyncImage(model=artwork, contentDescription=folder.name, modifier=Modifier.fillMaxSize(), contentScale=ContentScale.Crop)
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha=.72f)))))
             if (!folder.hideTitle) Text(folder.name, modifier=Modifier.align(Alignment.BottomStart).padding(10.dp), color=Color.White, style=MaterialTheme.typography.titleSmall, fontWeight=FontWeight.SemiBold, maxLines=2, overflow=TextOverflow.Ellipsis)
         }

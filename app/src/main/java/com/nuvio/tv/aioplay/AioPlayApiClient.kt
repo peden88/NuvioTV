@@ -311,6 +311,47 @@ class AioPlayApiClient @Inject constructor(
         return parseItems(json, catalog.type)
     }
 
+    suspend fun collections(token: String): List<AioPlayCollection> {
+        val json = requestJson("/api/v1/collections", token = token)
+        val array = json.optJSONArray("collections") ?: return emptyList()
+        return buildList {
+            for (index in 0 until array.length()) {
+                val collection = array.optJSONObject(index) ?: continue
+                val foldersJson = collection.optJSONArray("folders")
+                val folders = buildList {
+                    if (foldersJson != null) for (folderIndex in 0 until foldersJson.length()) {
+                        val folder = foldersJson.optJSONObject(folderIndex) ?: continue
+                        val id = folder.optString("id").trim()
+                        if (id.isBlank()) continue
+                        add(AioPlayCollectionFolder(
+                            id = id,
+                            name = folder.optString("name").ifBlank { "Collection" },
+                            coverImageUrl = folder.optString("coverImageUrl").takeIf { it.isNotBlank() },
+                            heroBackdropUrl = folder.optString("heroBackdropUrl").takeIf { it.isNotBlank() },
+                            focusGifUrl = folder.optString("focusGifUrl").takeIf { it.isNotBlank() },
+                            focusGifEnabled = folder.optBoolean("focusGifEnabled", false),
+                            tileShape = folder.optString("tileShape", "POSTER"),
+                            hideTitle = folder.optBoolean("hideTitle", false)
+                        ))
+                    }
+                }
+                add(AioPlayCollection(
+                    id = collection.optString("id").ifBlank { "collection-$index" },
+                    name = collection.optString("name").ifBlank { "Collections" },
+                    folders = folders
+                ))
+            }
+        }
+    }
+
+    suspend fun collectionFolder(token: String, folderId: String, offset: Int = 0, limit: Int = 60): List<AioPlayItem> {
+        val json = requestJson(
+            "/api/v1/collections/folder/" + encodePath(folderId) + "?offset=$offset&limit=$limit",
+            token = token
+        )
+        return parseItems(json, "movie")
+    }
+
     suspend fun vodCatalogs(token: String): List<AioPlayCatalog> {
         val json = requestJson("/api/v1/vod/catalogs", token = token)
         val array = json.optJSONArray("catalogs") ?: return emptyList()

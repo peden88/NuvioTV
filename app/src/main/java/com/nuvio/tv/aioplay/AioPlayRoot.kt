@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -368,6 +369,8 @@ private fun AioPlaySignedInApp(
                 restoreUniversalFocusToken = restoreUniversalFocusToken,
                 onSection = viewModel::selectSection,
                 onCatalog = viewModel::selectCatalog,
+                onCollectionFolder = viewModel::openCollectionFolder,
+                onCollectionBack = viewModel::closeCollectionFolder,
                 onItem = { item ->
                     entry.savedStateHandle["aioplay_home_last_opened_item_id"] = item.id
                     when (state.selectedSection) {
@@ -1279,6 +1282,8 @@ private fun AioPlayHomeScreen(
     restoreUniversalFocusToken: Int,
     onSection: (AioPlaySection) -> Unit,
     onCatalog: (AioPlayCatalog) -> Unit,
+    onCollectionFolder: (AioPlayCollectionFolder) -> Unit,
+    onCollectionBack: () -> Unit,
     onItem: (AioPlayItem) -> Unit,
     onToggleLibrary: (AioPlayItem) -> Unit,
     isInLibrary: (AioPlayItem) -> Boolean,
@@ -1289,6 +1294,19 @@ private fun AioPlayHomeScreen(
     onSettings: (AioPlayHomeFocusMemory) -> Unit,
     onAccount: (AioPlayHomeFocusMemory) -> Unit
 ) {
+    if (state.selectedSection == AioPlaySection.COLLECTIONS) {
+        AioPlayCollectionsScreen(
+            state = state,
+            onSection = onSection,
+            onFolder = onCollectionFolder,
+            onBackFolder = onCollectionBack,
+            onItem = onItem,
+            onSearch = { onSearch(AioPlayHomeFocusMemory(AioPlayHomeFocusZone.TOP, "collections", 0)) },
+            onSettings = { onSettings(AioPlayHomeFocusMemory(AioPlayHomeFocusZone.TOP, "collections", 0)) }
+        )
+        return
+    }
+
     val liveFocus = remember { FocusRequester() }
     val vodFocus = remember { FocusRequester() }
     val collectionsFocus = remember { FocusRequester() }
@@ -3101,5 +3119,103 @@ private fun AioPlayCenteredStatus(text: String) {
         contentAlignment = Alignment.Center
     ) {
         AioPlayLoadingLabel(text)
+    }
+}
+
+
+@Composable
+private fun AioPlayCollectionsScreen(
+    state: AioPlayUiState,
+    onSection: (AioPlaySection) -> Unit,
+    onFolder: (AioPlayCollectionFolder) -> Unit,
+    onBackFolder: () -> Unit,
+    onItem: (AioPlayItem) -> Unit,
+    onSearch: () -> Unit,
+    onSettings: () -> Unit
+) {
+    val firstFocus = remember { FocusRequester() }
+    BackHandler(enabled = state.selectedCollectionFolder != null) { onBackFolder() }
+    Box(Modifier.fillMaxSize().background(AioPlayBackgroundGradient)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 38.dp, vertical = 22.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(AioPlayTopGlass).padding(6.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(
+                    AioPlaySection.VOD to "VOD",
+                    AioPlaySection.COLLECTIONS to "Collections",
+                    AioPlaySection.CONTINUE to "Continue Watching",
+                    AioPlaySection.LIBRARY to "Library"
+                ).forEachIndexed { index, pair ->
+                    if (index > 0) Spacer(Modifier.width(8.dp))
+                    AioPlaySectionCard(pair.second, state.selectedSection == pair.first, { onSection(pair.first) })
+                }
+                Spacer(Modifier.width(8.dp))
+                AioPlaySectionCard("Search", false, onSearch)
+                Spacer(Modifier.weight(1f))
+                Button(onClick = onSettings, colors = ButtonDefaults.colors(containerColor=AioPlayPillIdle, focusedContainerColor=AioPlayPillSelected)) {
+                    Icon(Icons.Default.Settings, contentDescription="Settings")
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            val folder = state.selectedCollectionFolder
+            if (folder != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AioPlaySectionCard("Back", false, onBackFolder)
+                    Spacer(Modifier.width(14.dp))
+                    Text(folder.name, style=MaterialTheme.typography.headlineSmall, color=NuvioTheme.colors.TextPrimary, fontWeight=FontWeight.Bold)
+                }
+                Spacer(Modifier.height(14.dp))
+                if (state.loadingCatalog && state.items.isEmpty()) AioPlayCatalogSkeleton(posterMode=true)
+                else AioPlayCollectionTitleGrid(state.items, onItem, firstFocus)
+            } else {
+                Text("Collections", style=MaterialTheme.typography.headlineMedium, color=NuvioTheme.colors.TextPrimary, fontWeight=FontWeight.Bold)
+                Spacer(Modifier.height(12.dp))
+                if (state.collections.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) { Text(state.error ?: "No collections are available.", color=NuvioTheme.colors.TextSecondary) }
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(18.dp), contentPadding = PaddingValues(bottom=30.dp)) {
+                        items(state.collections, key={it.id}) { collection ->
+                            Column {
+                                Text(collection.name, style=MaterialTheme.typography.titleLarge, color=NuvioTheme.colors.TextPrimary, fontWeight=FontWeight.SemiBold)
+                                Spacer(Modifier.height(8.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    items(collection.folders, key={it.id}) { item -> AioPlayCollectionFolderCard(item, { onFolder(item) }) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayCollectionFolderCard(folder: AioPlayCollectionFolder, onClick: () -> Unit) {
+    val landscape = folder.tileShape.equals("LANDSCAPE", true)
+    Card(onClick=onClick, modifier=Modifier.width(if(landscape) 250.dp else 142.dp).height(if(landscape) 142.dp else 210.dp), shape=CardDefaults.shape(RoundedCornerShape(12.dp))) {
+        Box(Modifier.fillMaxSize()) {
+            AsyncImage(model=folder.coverImageUrl ?: folder.heroBackdropUrl, contentDescription=folder.name, modifier=Modifier.fillMaxSize(), contentScale=ContentScale.Crop)
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha=.72f)))))
+            if (!folder.hideTitle) Text(folder.name, modifier=Modifier.align(Alignment.BottomStart).padding(10.dp), color=Color.White, style=MaterialTheme.typography.titleSmall, fontWeight=FontWeight.SemiBold, maxLines=2, overflow=TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun AioPlayCollectionTitleGrid(items: List<AioPlayItem>, onItem: (AioPlayItem)->Unit, firstFocus: FocusRequester) {
+    if (items.isEmpty()) { Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) { Text("Nothing is available in this collection.", color=NuvioTheme.colors.TextSecondary) }; return }
+    LazyColumn(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        items(items.chunked(6)) { row ->
+            Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                row.forEachIndexed { index, item ->
+                    Card(onClick={onItem(item)}, modifier=Modifier.width(142.dp).height(214.dp).then(if(index==0 && item==items.first()) Modifier.focusRequester(firstFocus) else Modifier)) {
+                        AsyncImage(model=item.poster ?: item.background, contentDescription=item.name, modifier=Modifier.fillMaxSize(), contentScale=ContentScale.Crop)
+                    }
+                }
+            }
+        }
     }
 }

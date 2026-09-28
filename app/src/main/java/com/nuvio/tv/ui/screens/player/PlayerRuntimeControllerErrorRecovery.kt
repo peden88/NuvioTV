@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.screens.player
 
+import com.nuvio.tv.BuildConfig
+
 import android.util.Log
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -13,6 +15,7 @@ import kotlinx.coroutines.launch
 private const val MAX_STARTUP_AUTO_RETRIES = 2
 private const val MAX_AUTO_RETRIES = 2
 private const val MAX_DEAD_SOURCE_FAILOVERS = 3
+private const val AIOPLAY_FAILOVER_REWIND_MS = 2_000L
 
 // nt6 fix B: ceiling on TOTAL automatic recoveries for one stream URL, across
 // every fallback ladder combined (DV modes, safe audio, PCM, timeout, NPE, 416,
@@ -731,7 +734,7 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
     }
     _uiState.update { it.copy(deadSourceStreamUrls = deadSourceStreamUrls.toSet()) }
 
-    if (deadSourceFailoverCount >= MAX_DEAD_SOURCE_FAILOVERS) {
+    if (!BuildConfig.AIOPLAY_MODE && deadSourceFailoverCount >= MAX_DEAD_SOURCE_FAILOVERS) {
         Log.w(
             PlayerRuntimeController.TAG,
             "Dead-source failover cap ($MAX_DEAD_SOURCE_FAILOVERS) reached; surfacing error"
@@ -759,6 +762,9 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
                 "host=${next.getStreamUrl()?.safeHost()}"
     )
     val savedPosition = _exoPlayer?.currentPosition?.takeIf { it > 0L } ?: 0L
+    val resumePosition = if (BuildConfig.AIOPLAY_MODE && savedPosition > 0L) {
+        (savedPosition - AIOPLAY_FAILOVER_REWIND_MS).coerceAtLeast(0L)
+    } else savedPosition
     errorRetryJob?.cancel()
     scope.launch {
         _uiState.update {
@@ -769,9 +775,9 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
                 loadingMessage = context.getString(
                     com.nuvio.tv.R.string.player_dead_source_failover,
                     attemptNo,
-                    MAX_DEAD_SOURCE_FAILOVERS
+                    if (BuildConfig.AIOPLAY_MODE) streams.size.coerceAtLeast(attemptNo) else MAX_DEAD_SOURCE_FAILOVERS
                 ),
-                pendingSeekPosition = if (savedPosition > 0L) savedPosition else it.pendingSeekPosition
+                pendingSeekPosition = if (resumePosition > 0L) resumePosition else it.pendingSeekPosition
             )
         }
         switchToSourceStream(next)

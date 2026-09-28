@@ -473,6 +473,8 @@ private fun AioPlaySignedInApp(
                     entry.savedStateHandle["aioplay_search_last_opened_item_id"] = item.id
                     navController.navigate(detailRoute(item))
                 },
+                onSection = viewModel::selectSection,
+                onSettings = { navController.navigate(SETTINGS_ROUTE) },
                 onBack = {
                     navController.previousBackStackEntry?.savedStateHandle?.let { homeState ->
                         val token = homeState.get<Int>("aioplay_home_memory_restore_token") ?: 0
@@ -879,6 +881,8 @@ private fun AioPlaySearchScreen(
     restoreResultId: String?,
     restoreResultToken: Int,
     onResult: (AioPlayItem) -> Unit,
+    onSection: (AioPlaySection) -> Unit,
+    onSettings: () -> Unit,
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
@@ -1026,8 +1030,16 @@ private fun AioPlaySearchScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp, vertical = 18.dp)
+                .padding(horizontal = 38.dp, vertical = 22.dp)
         ) {
+            AioPlaySharedTopBar(
+                selected = AioPlaySection.VOD,
+                onSection = onSection,
+                onSearch = { runCatching { queryFocus.requestFocus() } },
+                onSettings = onSettings,
+                searchSelected = true
+            )
+            Spacer(modifier = Modifier.height(16.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -3186,7 +3198,8 @@ private fun AioPlaySharedTopBar(
     selected: AioPlaySection,
     onSection: (AioPlaySection) -> Unit,
     onSearch: () -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    searchSelected: Boolean = false
 ) {
     Row(
         Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp))
@@ -3204,7 +3217,7 @@ private fun AioPlaySharedTopBar(
             AioPlaySectionCard(pair.second, selected==pair.first, {onSection(pair.first)})
         }
         Spacer(Modifier.width(6.dp))
-        AioPlaySectionCard("Search", false, onSearch)
+        AioPlaySectionCard("Search", searchSelected, onSearch)
         Spacer(Modifier.weight(1f))
         Button(onClick=onSettings, colors=ButtonDefaults.colors(containerColor=Color.Transparent, focusedContainerColor=Color.White.copy(alpha=.28f))) {
             Icon(Icons.Default.Settings, contentDescription="Settings")

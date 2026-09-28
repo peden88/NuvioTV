@@ -8,6 +8,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nuvio.tv.R
+import com.nuvio.tv.BuildConfig
 import com.nuvio.tv.core.debrid.DebridStreamPresentation
 import com.nuvio.tv.core.debrid.DirectDebridResolveResult
 import com.nuvio.tv.core.debrid.DirectDebridResolver
@@ -570,6 +571,13 @@ class StreamScreenViewModel @Inject constructor(
                 // and must not be read as a win.
                 val selectedAutoPlayStream = if (!shouldAutoSelect) {
                     null
+                } else if (BuildConfig.AIOPLAY_MODE) {
+                    // AIOPlay treats AIOStreams ordering as authoritative. AIOStreams has
+                    // already filtered, ranked and prepared its candidates; selecting the
+                    // first returned result avoids a second, conflicting quality sort here.
+                    val first = allStreams.firstOrNull()
+                    android.util.Log.i(TAG, "AIOPLAY_SELECT src=aiostreams-order index=0 available=${allStreams.size}")
+                    first
                 } else {
                     val gateT0 = SystemClock.elapsedRealtime()
                     val outcome = PrefetchedSelectionGate.resolve(

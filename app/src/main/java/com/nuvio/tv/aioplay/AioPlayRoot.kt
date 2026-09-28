@@ -1608,10 +1608,9 @@ private fun AioPlayHomeScreen(
         Row(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
-                    .width(205.dp)
+                    .width(190.dp)
                     .fillMaxHeight()
-                    .background(AioPlayRailGlass)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .padding(start = 22.dp, end = 12.dp, top = 22.dp, bottom = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Row(
@@ -1688,14 +1687,15 @@ private fun AioPlayHomeScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .padding(start = 24.dp, end = 24.dp, bottom = 18.dp)
+                    .padding(start = 24.dp, end = 38.dp, top = 22.dp, bottom = 18.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(AioPlayTopGlass)
-                        .padding(horizontal = 6.dp, vertical = 5.dp)
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.055f))))
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
                 ) {
                     Row(
                         modifier = Modifier.align(Alignment.Center),
@@ -2310,7 +2310,7 @@ private fun AioPlaySectionCard(
                     }
                 )
                 .background(
-                    if (selected) AioPlayPillSelected else AioPlayPillIdle,
+                    if (isFocused) Color.White.copy(alpha = 0.12f) else if (selected) Color.White.copy(alpha = 0.08f) else Color.Transparent,
                     innerShape
                 )
                 .padding(vertical = 6.dp, horizontal = 14.dp),
@@ -2337,8 +2337,8 @@ private fun AioPlayNavCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = remember { RoundedCornerShape(13.dp) }
-    val innerShape = remember { RoundedCornerShape(11.dp) }
+    val shape = remember { RoundedCornerShape(21.dp) }
+    val innerShape = remember { RoundedCornerShape(20.dp) }
     var isFocused by remember { mutableStateOf(false) }
 
     Card(
@@ -2364,9 +2364,9 @@ private fun AioPlayNavCard(
                 .fillMaxWidth()
                 .then(
                     when {
-                        isFocused -> Modifier.background(Color.White.copy(alpha = 0.90f), shape)
-                        selected -> Modifier.background(AioPlayAccentGradient, shape)
-                        else -> Modifier.background(Color.White.copy(alpha = 0.06f), shape)
+                        isFocused -> Modifier.background(Color.White.copy(alpha = 0.28f), shape)
+                        selected -> Modifier.background(Color.White.copy(alpha = 0.14f), shape)
+                        else -> Modifier.background(Color.Transparent, shape)
                     }
                 )
                 .padding(
@@ -2380,7 +2380,7 @@ private fun AioPlayNavCard(
                     if (selected) AioPlayPillSelected else AioPlayPillIdle,
                     innerShape
                 )
-                .padding(horizontal = 13.dp, vertical = 6.dp)
+                .padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
             Text(
                 text = text,
@@ -3138,7 +3138,7 @@ private fun AioPlayCollectionsScreen(
     Box(Modifier.fillMaxSize().background(AioPlayBackgroundGradient)) {
         Column(Modifier.fillMaxSize().padding(horizontal = 38.dp, vertical = 22.dp)) {
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(AioPlayTopGlass).padding(6.dp),
+                Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp)).background(Brush.verticalGradient(listOf(Color.White.copy(alpha=.16f), Color.White.copy(alpha=.055f)))).padding(horizontal=8.dp, vertical=5.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {

@@ -2386,22 +2386,29 @@ private fun AioPlayNavCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .then(
-                    when {
-                        isFocused -> Modifier.background(Color.White.copy(alpha = 0.28f), shape)
-                        selected -> Modifier.background(Color.White.copy(alpha = 0.14f), shape)
-                        else -> Modifier.background(Color.Transparent, shape)
-                    }
+                .background(
+                    Brush.verticalGradient(
+                        when {
+                            isFocused -> listOf(Color.White.copy(alpha = 0.34f), Color.White.copy(alpha = 0.16f))
+                            selected -> listOf(Color.White.copy(alpha = 0.22f), Color.White.copy(alpha = 0.09f))
+                            else -> listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.055f))
+                        }
+                    ),
+                    shape
                 )
                 .padding(
                     when {
-                        isFocused -> 2.dp
+                        isFocused -> 2.5.dp
                         selected -> 1.5.dp
                         else -> 1.dp
                     }
                 )
                 .background(
-                    if (selected) AioPlayPillSelected else AioPlayPillIdle,
+                    when {
+                        isFocused -> Color.White.copy(alpha = 0.10f)
+                        selected -> AioPlayPillSelected
+                        else -> Color.Transparent
+                    },
                     innerShape
                 )
                 .padding(horizontal = 14.dp, vertical = 8.dp)
@@ -3330,8 +3337,19 @@ private fun AioPlayCollectionTitleGrid(items: List<AioPlayItem>, onItem: (AioPla
         items(items.chunked(6)) { row ->
             Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                 row.forEachIndexed { index, item ->
-                    Card(onClick={onItem(item)}, modifier=Modifier.width(142.dp).height(214.dp).then(if(index==0 && item==items.first()) Modifier.focusRequester(firstFocus) else Modifier)) {
-                        AsyncImage(model=item.poster ?: item.background, contentDescription=item.name, modifier=Modifier.fillMaxSize(), contentScale=ContentScale.Crop)
+                    Column(modifier=Modifier.width(142.dp)) {
+                        Card(onClick={onItem(item)}, modifier=Modifier.fillMaxWidth().height(190.dp).then(if(index==0 && item==items.first()) Modifier.focusRequester(firstFocus) else Modifier)) {
+                            AsyncImage(model=item.poster ?: item.background, contentDescription=item.name, modifier=Modifier.fillMaxSize(), contentScale=ContentScale.Crop)
+                        }
+                        Spacer(Modifier.height(5.dp))
+                        Text(
+                            text=item.name,
+                            color=NuvioTheme.colors.TextPrimary,
+                            style=MaterialTheme.typography.bodySmall.copy(fontSize=10.sp, lineHeight=12.sp),
+                            fontWeight=FontWeight.Medium,
+                            maxLines=1,
+                            overflow=TextOverflow.Ellipsis
+                        )
                     }
                 }
             }

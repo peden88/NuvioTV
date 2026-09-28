@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// Upstream robustness note: keep corruption recovery enabled for AIOPlay session state.
 private val Context.aioPlaySessionDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "aioplay_session_store",
     corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler {

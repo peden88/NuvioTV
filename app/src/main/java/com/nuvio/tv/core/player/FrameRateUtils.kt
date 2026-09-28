@@ -39,8 +39,7 @@ object FrameRateUtils {
     private const val MKV_EXTENSION = ".mkv"
     private const val SWITCH_POLL_INTERVAL_MS = 60L
     private const val SWITCH_REQUIRED_STABLE_POLLS = 2
-    /** Below this the reported rate is not real content; never switch the panel for it. */
-    private const val MIN_AFR_SWITCH_FPS = 20f
+    private const val RESOLUTION_MATCH_MIN_SHORT_SIDE = 720
 
     data class DisplayModeSwitchResult(
         val appliedMode: Display.Mode
@@ -52,142 +51,6 @@ object FrameRateUtils {
     private val frameRateCache = object : LinkedHashMap<String, FrameRateDetection>(FRAME_RATE_CACHE_SIZE, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, FrameRateDetection>?): Boolean {
             return size > FRAME_RATE_CACHE_SIZE
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // C-1 (15 Aug 2026): disk persistence for the fps cache.
-    //
-    // The cache's only durable writer is the track-format AFR path, which
-    // runs AFTER prepare -- so on every cold process start the preflight
-    // reader misses and the play pays the mid-prepare display switch and
-    // audio re-handshake. Persisting detections lets every rewatch take
-    // the preflight hit path: switch before prepare, sink opens once.
-    //
-    //  * INERT WHEN UNINITIALISED: unit tests never call
-    //    initFrameRateCachePersistence, so JVM behaviour is byte-identical
-    //    to the pre-C-1 cache (the eviction/keying tests pin it).
-    //  * PRIVACY: cache keys embed sanitised header values (debrid/Emby
-    //    tokens ride in them). Only SHA-256(key) ever touches disk; the
-    //    plaintext key never leaves memory.
-    //  * TTL: persisted entries expire after 30 days. The preflight hit
-    //    path stands down track-format AFR, so a stale entry (same
-    //    filename, different content) would be uncorrectable within a
-    //    play -- bound its lifetime instead.
-    //  * Writes are debounced 2 s onto a single daemon thread and land
-    //    via temp-file + rename; the startup path never blocks on IO.
-    private const val PERSIST_CAP = 256
-    private const val PERSIST_TTL_MS = 30L * 24 * 60 * 60 * 1000
-    private const val PERSIST_FLUSH_DELAY_MS = 2000L
-    private const val PERSIST_FILE_NAME = "afr_fps_cache_v1.txt"
-
-    private class PersistedDetection(
-        val detection: FrameRateDetection,
-        val storedAtMs: Long
-    )
-
-    @Volatile private var persistFile: java.io.File? = null
-    private val persistFlushPending = java.util.concurrent.atomic.AtomicBoolean(false)
-    private val persistExecutor: java.util.concurrent.ScheduledExecutorService by lazy {
-        java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
-            Thread(r, "AfrCachePersist").apply { isDaemon = true }
-        }
-    }
-
-    // SHA-256(cache key) -> detection + store time. Guarded by the
-    // frameRateCache lock so reader promotion, writer insertion and flush
-    // snapshots cannot interleave.
-    private val persistedCache = object : LinkedHashMap<String, PersistedDetection>(PERSIST_CAP, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PersistedDetection>?): Boolean {
-            return size > PERSIST_CAP
-        }
-    }
-
-    /** Idempotent; call once from Application.onCreate. Loads off-thread. */
-    fun initFrameRateCachePersistence(context: android.content.Context) {
-        if (persistFile != null) return
-        val file = java.io.File(context.filesDir, PERSIST_FILE_NAME)
-        persistFile = file
-        persistExecutor.execute { loadPersistedCache(file) }
-    }
-
-    private fun hashKey(key: String): String {
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
-        val bytes = digest.digest(key.toByteArray(Charsets.UTF_8))
-        val sb = StringBuilder(bytes.size * 2)
-        for (b in bytes) {
-            val v = b.toInt() and 0xFF
-            if (v < 0x10) sb.append('0')
-            sb.append(Integer.toHexString(v))
-        }
-        return sb.toString()
-    }
-
-    private fun loadPersistedCache(file: java.io.File) {
-        val now = System.currentTimeMillis()
-        val loaded = ArrayList<Pair<String, PersistedDetection>>()
-        try {
-            if (!file.exists()) return
-            file.bufferedReader().useLines { lines ->
-                lines.forEach { line ->
-                    val parts = line.split('|')
-                    if (parts.size != 6) return@forEach
-                    val hash = parts[0]
-                    val storedAt = parts[1].toLongOrNull() ?: return@forEach
-                    if (now - storedAt > PERSIST_TTL_MS) return@forEach
-                    val raw = parts[2].toFloatOrNull() ?: return@forEach
-                    val snapped = parts[3].toFloatOrNull() ?: return@forEach
-                    val w = parts[4].toIntOrNull()
-                    val h = parts[5].toIntOrNull()
-                    loaded.add(hash to PersistedDetection(FrameRateDetection(raw, snapped, w, h), storedAt))
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "AFR fps cache load failed (starting empty): ${e.message}")
-            return
-        }
-        if (loaded.isEmpty()) return
-        synchronized(frameRateCache) {
-            loaded.forEach { (hash, entry) ->
-                if (!persistedCache.containsKey(hash)) persistedCache[hash] = entry
-            }
-        }
-        Log.i(TAG, "AFR fps cache hydrated: ${loaded.size} persisted detection(s)")
-    }
-
-    private fun schedulePersistFlush() {
-        if (persistFile == null) return
-        if (!persistFlushPending.compareAndSet(false, true)) return
-        persistExecutor.schedule({
-            persistFlushPending.set(false)
-            flushPersistedCache()
-        }, PERSIST_FLUSH_DELAY_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
-    }
-
-    private fun flushPersistedCache() {
-        val file = persistFile ?: return
-        val snapshot: List<Pair<String, PersistedDetection>> = synchronized(frameRateCache) {
-            persistedCache.entries.map { it.key to it.value }
-        }
-        try {
-            val tmp = java.io.File(file.parentFile, file.name + ".tmp")
-            tmp.bufferedWriter().use { w ->
-                snapshot.forEach { (hash, e) ->
-                    w.append(hash).append('|')
-                    w.append(e.storedAtMs.toString()).append('|')
-                    w.append(e.detection.raw.toString()).append('|')
-                    w.append(e.detection.snapped.toString()).append('|')
-                    w.append(e.detection.videoWidth?.toString() ?: "").append('|')
-                    w.append(e.detection.videoHeight?.toString() ?: "")
-                    w.newLine()
-                }
-            }
-            if (!tmp.renameTo(file)) {
-                file.delete()
-                tmp.renameTo(file)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "AFR fps cache flush failed: ${e.message}")
         }
     }
 
@@ -239,14 +102,8 @@ object FrameRateUtils {
 
     internal fun buildCacheKey(url: String, headers: Map<String, String>, filename: String?): String {
         val sanitized = sanitizeHeaders(headers)
-        // The resolved CDN host rotates per debrid resolve (nexus-170/196/197/198
-        // all observed for one title on 24 Jul 2026), so including it here made the
-        // entry miss whenever a fresh resolve landed on a different edge -- the
-        // cache only hit when the link cache happened to return the identical URL.
-        // The filename identifies the content; the host is transport. Reader and
-        // writer both come through here, so the two sides cannot disagree.
         val baseKey = if (!filename.isNullOrBlank()) {
-            "file://$filename"
+            "file://${parseUriHost(url)}/$filename"
         } else {
             url.substringBefore('?')
         }
@@ -268,21 +125,8 @@ object FrameRateUtils {
 
     fun getCachedFrameRate(url: String, headers: Map<String, String>, filename: String? = null): FrameRateDetection? {
         val key = buildCacheKey(url, headers, filename)
-        synchronized(frameRateCache) {
-            val inMemory = frameRateCache[key]
-            if (inMemory != null) return inMemory
-            if (persistedCache.isEmpty()) return null
-            val hash = hashKey(key)
-            val persisted = persistedCache[hash] ?: return null
-            if (System.currentTimeMillis() - persisted.storedAtMs > PERSIST_TTL_MS) {
-                persistedCache.remove(hash)
-                return null
-            }
-            // Promote so LRU ordering and later writes behave exactly as a
-            // same-process detection would.
-            frameRateCache[key] = persisted.detection
-            Log.i(TAG, "AFR fps cache: served from persisted entry")
-            return persisted.detection
+        return synchronized(frameRateCache) {
+            frameRateCache[key]
         }
     }
 
@@ -290,18 +134,13 @@ object FrameRateUtils {
         val key = buildCacheKey(url, headers, filename)
         synchronized(frameRateCache) {
             frameRateCache[key] = detection
-            if (persistFile != null) {
-                persistedCache[hashKey(key)] = PersistedDetection(detection, System.currentTimeMillis())
-            }
         }
-        schedulePersistFlush()
     }
 
     /** Test-only: wipe the in-memory FPS cache between unit tests. */
     internal fun clearFrameRateCache() {
         synchronized(frameRateCache) {
             frameRateCache.clear()
-            persistedCache.clear()
         }
     }
 
@@ -312,12 +151,21 @@ object FrameRateUtils {
         val videoHeight: Int? = null
     )
 
+    internal data class DisplayModeSpec(
+        val modeId: Int,
+        val width: Int,
+        val height: Int,
+        val refreshRate: Float
+    )
+
+    private fun Display.Mode.toSpec() = DisplayModeSpec(modeId, physicalWidth, physicalHeight, refreshRate)
+
     private fun matchesTargetRefresh(refreshRate: Float, target: Float): Boolean {
         val tolerance = max(REFRESH_MATCH_MIN_TOLERANCE_HZ, target * 0.003f)
         return abs(refreshRate - target) <= tolerance
     }
 
-    private fun pickBestForTarget(modes: List<Display.Mode>, target: Float): Display.Mode? {
+    private fun pickBestForTarget(modes: List<DisplayModeSpec>, target: Float): DisplayModeSpec? {
         if (target <= 0f) return null
         val closest = modes.minByOrNull { abs(it.refreshRate - target) } ?: return null
         return if (matchesTargetRefresh(closest.refreshRate, target)) closest else null
@@ -376,7 +224,7 @@ object FrameRateUtils {
             val sameSizeModes = display.supportedModes.filter {
                 it.physicalWidth == activeMode.physicalWidth &&
                     it.physicalHeight == activeMode.physicalHeight
-            }
+            }.map { it.toSpec() }
             if (sameSizeModes.isEmpty()) return detectedFps
 
             val has23976 = pickBestForTarget(sameSizeModes, NTSC_FILM_FPS) != null
@@ -401,38 +249,16 @@ object FrameRateUtils {
         }
     }
 
-    /**
-     * How well a chosen mode actually serves the content's frame rate.
-     * EXACT and DOUBLE are clean cadences; PULLDOWN is 2:3 judder that merely
-     * happens to divide evenly; FALLBACK is the least-bad of a bad set.
-     * Previously this distinction existed only as the order of the elvis chain
-     * and was discarded on return, so nothing above could tell a clean match
-     * from a judder-inducing one.
-     */
-    internal enum class ModeMatchQuality { EXACT, DOUBLE, PULLDOWN, FALLBACK }
-
-    internal data class ModeChoice(val mode: Display.Mode, val quality: ModeMatchQuality)
-
-    /** True for cadences worth giving up a resolution match to obtain. */
-    private fun ModeMatchQuality.isCleanCadence() =
-        this == ModeMatchQuality.EXACT || this == ModeMatchQuality.DOUBLE
-
     private fun chooseBestModeForFrameRate(
-        activeMode: Display.Mode,
-        modes: List<Display.Mode>,
+        activeMode: DisplayModeSpec,
+        modes: List<DisplayModeSpec>,
         frameRate: Float
-    ): ModeChoice {
-        pickBestForTarget(modes, frameRate)?.let {
-            return ModeChoice(it, ModeMatchQuality.EXACT)
-        }
-        pickBestForTarget(modes, frameRate * 2f)?.let {
-            return ModeChoice(it, ModeMatchQuality.DOUBLE)
-        }
-        pickBestForTarget(modes, frameRate * 2.5f)?.let {
-            return ModeChoice(it, ModeMatchQuality.PULLDOWN)
-        }
+    ): DisplayModeSpec {
+        val modeExact = pickBestForTarget(modes, frameRate)
+        val modeDouble = pickBestForTarget(modes, frameRate * 2f)
+        val modePulldown = pickBestForTarget(modes, frameRate * 2.5f)
         val modeFallback = modes.minByOrNull { refreshWeight(it.refreshRate, frameRate) }
-        return ModeChoice(modeFallback ?: activeMode, ModeMatchQuality.FALLBACK)
+        return modeExact ?: modeDouble ?: modePulldown ?: modeFallback ?: activeMode
     }
 
     private fun hasValidVideoSize(videoWidth: Int?, videoHeight: Int?): Boolean {
@@ -443,28 +269,65 @@ object FrameRateUtils {
         return if (width >= height) width to height else height to width
     }
 
-    private fun resolutionDistanceSquared(mode: Display.Mode, targetWidth: Int, targetHeight: Int): Long {
-        val (modeWidth, modeHeight) = normalizedSize(mode.physicalWidth, mode.physicalHeight)
-        val dw = modeWidth - targetWidth
-        val dh = modeHeight - targetHeight
-        return dw.toLong() * dw.toLong() + dh.toLong() * dh.toLong()
-    }
-
-    private fun selectModesForVideoResolution(
-        modes: List<Display.Mode>,
+    private fun resolutionCandidateGroups(
+        modes: List<DisplayModeSpec>,
         videoWidth: Int,
         videoHeight: Int
-    ): List<Display.Mode> {
-        if (modes.isEmpty()) return modes
-        // AFR review F8/R6: floor at 720p. "Nearest resolution" with no lower
-        // bound meant an SD file could drop the whole HDMI output - UI included -
-        // to a 480p/576p mode (Amlogic boxes commonly expose them). The intended
-        // 4K<->1080p use case is unaffected.
-        val flooredModes = modes.filter { it.physicalHeight >= 720 && it.physicalWidth >= 1280 }
-            .ifEmpty { modes }
+    ): List<List<DisplayModeSpec>> {
+        if (modes.isEmpty()) return emptyList()
         val (targetWidth, targetHeight) = normalizedSize(videoWidth, videoHeight)
-        val minDistance = flooredModes.minOfOrNull { resolutionDistanceSquared(it, targetWidth, targetHeight) } ?: return flooredModes
-        return flooredModes.filter { resolutionDistanceSquared(it, targetWidth, targetHeight) == minDistance }
+
+        fun area(mode: DisplayModeSpec): Long {
+            val (normalizedWidth, normalizedHeight) = normalizedSize(mode.width, mode.height)
+            return normalizedWidth.toLong() * normalizedHeight.toLong()
+        }
+
+        fun fits(mode: DisplayModeSpec): Boolean {
+            val (modeWidth, modeHeight) = normalizedSize(mode.width, mode.height)
+            return modeWidth >= targetWidth && modeHeight >= targetHeight
+        }
+
+        // Never below 720p when the display offers 720p or larger.
+        val eligible = modes.filter { min(it.width, it.height) >= RESOLUTION_MATCH_MIN_SHORT_SIDE }
+            .ifEmpty { modes }
+        val fitting = eligible.filter { fits(it) }
+        if (fitting.isNotEmpty()) {
+            return fitting.groupBy { area(it) }.toSortedMap().values.toList()
+        }
+
+        val maxArea = eligible.maxOf { area(it) }
+        return listOf(eligible.filter { area(it) == maxArea })
+    }
+
+    internal fun selectDisplayMode(
+        modes: List<DisplayModeSpec>,
+        activeMode: DisplayModeSpec,
+        frameRate: Float,
+        videoWidth: Int?,
+        videoHeight: Int?,
+        resolutionMatchingEnabled: Boolean
+    ): DisplayModeSpec? {
+        if (resolutionMatchingEnabled && hasValidVideoSize(videoWidth, videoHeight)) {
+            val sizeGroups = resolutionCandidateGroups(
+                modes = modes,
+                videoWidth = videoWidth ?: activeMode.width,
+                videoHeight = videoHeight ?: activeMode.height
+            )
+            if (sizeGroups.isEmpty()) return null
+            // Frame rate first: the smallest size that shows the rate exactly or doubled.
+            for (group in sizeGroups) {
+                (pickBestForTarget(group, frameRate) ?: pickBestForTarget(group, frameRate * 2f))
+                    ?.let { return it }
+            }
+            return chooseBestModeForFrameRate(activeMode, sizeGroups.first(), frameRate)
+        }
+
+        val sameSizeModes = modes.filter {
+            it.width == activeMode.width && it.height == activeMode.height
+        }
+        if (sameSizeModes.isEmpty()) return null
+        if (!resolutionMatchingEnabled && sameSizeModes.size <= 1) return null
+        return chooseBestModeForFrameRate(activeMode, sameSizeModes, frameRate)
     }
 
     suspend fun matchFrameRateAndWait(
@@ -476,122 +339,34 @@ object FrameRateUtils {
     ): DisplayModeSwitchResult? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
         if (frameRate <= 0f) return null
-        // Sanity floor. A broken source can report an absurd rate -- 24 Jul 2026 a
-        // StremThru entry served a 30 s 1280x720 error stub at frameRate=1.0 and the
-        // panel was driven 59.94Hz -> 50.0Hz for it, costing a switch, a settle and
-        // an exit blank for content that was never the episode. snapToStandardRate
-        // recognises nothing below 23.90 fps, so anything under this floor cannot be
-        // matched meaningfully anyway; leave the display alone.
-        if (frameRate < MIN_AFR_SWITCH_FPS) {
-            Log.w(TAG, "Refusing display-mode switch for implausible frame rate ${frameRate}fps")
-            return null
-        }
 
         val switchPlan = withContext(Dispatchers.Main) {
             val window = activity.window ?: return@withContext null
             val display = window.decorView.display ?: return@withContext null
             val activeMode = display.mode
+            val supportedModes = display.supportedModes.toList()
 
-            val sameSizeModes = display.supportedModes.filter {
-                it.physicalWidth == activeMode.physicalWidth &&
-                    it.physicalHeight == activeMode.physicalHeight
-            }
-            val candidateModes = if (resolutionMatchingEnabled && hasValidVideoSize(videoWidth, videoHeight)) {
-                selectModesForVideoResolution(
-                    modes = display.supportedModes.toList(),
-                    videoWidth = videoWidth ?: activeMode.physicalWidth,
-                    videoHeight = videoHeight ?: activeMode.physicalHeight
-                )
-            } else {
-                sameSizeModes
-            }
-            if (candidateModes.isEmpty()) {
-                Log.d(
-                    TAG,
-                    "No candidate display modes; leaving the display at " +
-                        "${activeMode.refreshRate}Hz for ${frameRate}fps"
-                )
-                return@withContext Pair<Display.Mode?, DisplayModeSwitchResult?>(
-                    null,
-                    DisplayModeSwitchResult(activeMode)
-                )
-            }
-            if (!resolutionMatchingEnabled && candidateModes.size <= 1) {
-                // Previously a silent return: the app did nothing and said nothing, which
-                // is why a display that can never frame-rate match took a user report to
-                // find.
-                Log.d(
-                    TAG,
-                    "Display offers a single mode at " +
-                        "${activeMode.physicalWidth}x${activeMode.physicalHeight} " +
-                        "(${activeMode.refreshRate}Hz): no app-side frame rate matching is " +
-                        "possible for ${frameRate}fps"
-                )
-                return@withContext Pair<Display.Mode?, DisplayModeSwitchResult?>(
-                    null,
-                    DisplayModeSwitchResult(activeMode)
-                )
-            }
-
-            var choice = chooseBestModeForFrameRate(
-                activeMode = activeMode,
-                modes = candidateModes,
-                frameRate = frameRate
+            val selected = selectDisplayMode(
+                modes = supportedModes.map { it.toSpec() },
+                activeMode = activeMode.toSpec(),
+                frameRate = frameRate,
+                videoWidth = videoWidth,
+                videoHeight = videoHeight,
+                resolutionMatchingEnabled = resolutionMatchingEnabled
             )
-
-            // Resolution matching narrows the candidates to the mode family
-            // nearest the video's own size. When that family cannot serve the
-            // content's cadence, honouring it costs judder for a benefit
-            // nobody asked for.
-            //
-            // Observed 21 Jul 2026 on an LG C9 (S905X5M): a 1920x1080 23.976
-            // title selected the 1080p family, whose only rates are
-            // 59.94 / 60 / 50. No exact or double match exists there, so the
-            // 2.5x branch matched 59.94 and the display sat in 2:3 pulldown -
-            // while 3840x2160 @ 23.976 (modeId 9) went unused one resolution
-            // away. Every rung behaved as written; nothing weighed the two
-            // kinds of match against each other.
-            //
-            // The rule: an exact or double frame-rate match beats a resolution
-            // match. A pulldown or fallback match does not. So resolution
-            // matching keeps working wherever it costs nothing - which is
-            // every 4K case - and stands down only where it would cost cadence.
-            if (resolutionMatchingEnabled && !choice.quality.isCleanCadence()) {
-                val wider = chooseBestModeForFrameRate(
-                    activeMode = activeMode,
-                    modes = display.supportedModes.toList(),
-                    frameRate = frameRate
-                )
-                if (wider.quality.isCleanCadence()) {
-                    Log.d(
-                        TAG,
-                        "Resolution-matched modes offer only a ${choice.quality} match for " +
-                            "${frameRate}fps; widening to all display modes for a " +
-                            "${wider.quality} match at ${wider.mode.refreshRate}Hz " +
-                            "(${wider.mode.physicalWidth}x${wider.mode.physicalHeight})"
-                    )
-                    choice = wider
-                }
+            val modeBest = selected?.let { spec ->
+                supportedModes.firstOrNull { it.modeId == spec.modeId }
+                    ?: activeMode.takeIf { it.modeId == spec.modeId }
             }
-            val modeBest = choice.mode
+            if (modeBest == null) {
+                return@withContext Pair<Display.Mode?, DisplayModeSwitchResult?>(
+                    null,
+                    DisplayModeSwitchResult(activeMode)
+                )
+            }
             recordOriginalMode(display)
             if (modeBest.modeId == activeMode.modeId) {
-                // Not necessarily optimal: very often it is simply the only mode on offer,
-                // and calling 60Hz "optimal" for 25fps content is a plain untruth. Say
-                // which of the two it is.
-                val alternatives = candidateModes.size - 1
-                Log.d(
-                    TAG,
-                    if (alternatives <= 0) {
-                        "No alternative display mode at " +
-                            "${activeMode.physicalWidth}x${activeMode.physicalHeight}: staying at " +
-                            "${activeMode.refreshRate}Hz for ${frameRate}fps. The panel may still be " +
-                            "matching the content on its own — Android cannot report that."
-                    } else {
-                        "Keeping ${activeMode.refreshRate}Hz for ${frameRate}fps: best of " +
-                            "${candidateModes.size} candidate modes"
-                    }
-                )
+                Log.d(TAG, "Display already at optimal rate ${activeMode.refreshRate}Hz for ${frameRate}fps")
                 return@withContext Pair<Display.Mode?, DisplayModeSwitchResult?>(
                     null,
                     DisplayModeSwitchResult(activeMode)
@@ -680,26 +455,6 @@ object FrameRateUtils {
             Log.e(TAG, "Failed to restore display mode", e)
             false
         }
-    }
-
-    // C-2: an explicit proximity gate for the pre-seed. snapToStandardRate is
-    // NOT usable for this test -- an input already equal to a ladder value
-    // returns unchanged, so "snap changed the value" cannot distinguish an
-    // on-ladder rate from an off-ladder one. Only a rate this close to a known
-    // standard is trusted enough to switch the panel before prepare; anything
-    // else (a torn/misparsed head, an audio DefaultDuration mistaken for video)
-    // is left to the post-prepare track-format path.
-    private val STANDARD_RATES = floatArrayOf(
-        NTSC_FILM_FPS, CINEMA_24_FPS, 25f, 30000f / 1001f, 30f, 50f, 60000f / 1001f, 60f
-    )
-    private const val STANDARD_RATE_TOLERANCE_FPS = 0.05f
-
-    internal fun isNearStandardRate(fps: Float): Boolean {
-        if (!fps.isFinite() || fps < MIN_AFR_SWITCH_FPS) return false
-        for (r in STANDARD_RATES) {
-            if (abs(fps - r) <= STANDARD_RATE_TOLERANCE_FPS) return true
-        }
-        return false
     }
 
     fun snapToStandardRate(formatFrameRate: Float): Float {
@@ -1675,9 +1430,6 @@ object FrameRateUtils {
         return null
     }
 
-    /** Hard deadline after which a stuck extractor probe is force-released. */
-    private const val EXTRACTOR_PROBE_HARD_DEADLINE_MS = 6_000L
-
     private fun detectFrameRateWithExtractor(
         context: Context,
         sourceUrl: String,
@@ -1686,30 +1438,6 @@ object FrameRateUtils {
     ): FrameRateDetection? {
         val safeHeaders = headers
         val extractor = MediaExtractor()
-        // AFR review F1: MediaExtractor.setDataSource() is a blocking native call
-        // that cooperative withTimeoutOrNull cancellation cannot interrupt. On a
-        // non-faststart MP4 (moov atom at the tail) it reads toward end-of-file
-        // and can block indefinitely (runtime-confirmed >=109 s on 0.7.12-beta -
-        // "AFR on hangs, AFR off starts cleanly"). Releasing the extractor from a
-        // watchdog thread aborts the native open, making the probe budget real.
-        val probeFinished = java.util.concurrent.atomic.AtomicBoolean(false)
-        val watchdog = Thread({
-            try {
-                Thread.sleep(EXTRACTOR_PROBE_HARD_DEADLINE_MS)
-            } catch (_: InterruptedException) {
-                return@Thread
-            }
-            if (!probeFinished.get()) {
-                Log.w(TAG, "AFR extractor probe exceeded ${EXTRACTOR_PROBE_HARD_DEADLINE_MS} ms; force-releasing extractor")
-                try {
-                    extractor.release()
-                } catch (_: Throwable) {
-                }
-            }
-        }, "afr-probe-watchdog").apply {
-            isDaemon = true
-            start()
-        }
         return try {
             val uri = Uri.parse(sourceUrl)
             when (uri.scheme?.lowercase()) {
@@ -1796,8 +1524,6 @@ object FrameRateUtils {
             Log.w(TAG, "Frame rate probe failed: ${e.message}")
             null
         } finally {
-            probeFinished.set(true)
-            watchdog.interrupt()
             try {
                 extractor.release()
             } catch (_: Exception) {

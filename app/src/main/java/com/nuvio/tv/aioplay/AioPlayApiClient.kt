@@ -311,6 +311,14 @@ class AioPlayApiClient @Inject constructor(
         return parseItems(json, catalog.type)
     }
 
+    private fun resolveCollectionAssetUrl(value: String?): String? {
+        val raw = value?.trim().orEmpty()
+        if (raw.isBlank()) return null
+        if (raw.startsWith("http://") || raw.startsWith("https://")) return raw
+        if (!raw.startsWith("/")) return raw
+        return requireBaseUrl().trimEnd('/') + raw
+    }
+
     suspend fun collections(token: String): List<AioPlayCollection> {
         val json = requestJson("/api/v1/collections", token = token)
         val array = json.optJSONArray("collections") ?: return emptyList()
@@ -326,9 +334,9 @@ class AioPlayApiClient @Inject constructor(
                         add(AioPlayCollectionFolder(
                             id = id,
                             name = folder.optString("name").ifBlank { "Collection" },
-                            coverImageUrl = folder.optString("coverImageUrl").takeIf { it.isNotBlank() },
-                            heroBackdropUrl = folder.optString("heroBackdropUrl").takeIf { it.isNotBlank() },
-                            focusGifUrl = folder.optString("focusGifUrl").takeIf { it.isNotBlank() },
+                            coverImageUrl = resolveCollectionAssetUrl(folder.optString("coverImageUrl")),
+                            heroBackdropUrl = resolveCollectionAssetUrl(folder.optString("heroBackdropUrl")),
+                            focusGifUrl = resolveCollectionAssetUrl(folder.optString("focusGifUrl")),
                             focusGifEnabled = folder.optBoolean("focusGifEnabled", false),
                             tileShape = folder.optString("tileShape", "POSTER"),
                             hideTitle = folder.optBoolean("hideTitle", false)

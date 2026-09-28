@@ -714,6 +714,14 @@ internal fun PlayerRuntimeController.attemptDeadSourceFailover(
  * of options (cap reached or no live sources left) so the caller surfaces the
  * error screen.
  */
+private fun com.nuvio.tv.domain.model.Stream.aioplayFailoverKey(): String {
+    val hash = infoHash ?: clientResolve?.infoHash
+    if (!hash.isNullOrBlank()) return "$addonName|hash:${hash.lowercase()}|file:${fileIdx ?: clientResolve?.fileIdx ?: -1}"
+    val url = getStreamUrl()
+    if (!url.isNullOrBlank()) return "$addonName|url:$url"
+    return "$addonName|meta:${name.orEmpty()}|${title.orEmpty()}|${description.orEmpty().hashCode()}"
+}
+
 internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: String): Boolean {
     // Mark dead: both the resolved playback URL and, where identifiable, the
     // original list entry (debrid resolution can make these differ) so the
@@ -730,7 +738,10 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
         currentStreamName = state.currentStreamName
     )
     if (currentIdx >= 0) {
-        streams.getOrNull(currentIdx)?.getStreamUrl()?.let { deadSourceStreamUrls.add(it) }
+        streams.getOrNull(currentIdx)?.let { failed ->
+            failed.getStreamUrl()?.let { deadSourceStreamUrls.add(it) }
+            if (BuildConfig.AIOPLAY_MODE) deadSourceStreamKeys.add(failed.aioplayFailoverKey())
+        }
     }
     _uiState.update { it.copy(deadSourceStreamUrls = deadSourceStreamUrls.toSet()) }
 
@@ -748,7 +759,9 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
         .map { streams[it] }
         .firstOrNull { candidate ->
             val url = candidate.getStreamUrl()
-            url == null || !deadSourceStreamUrls.contains(url)
+            val urlAlive = url == null || !deadSourceStreamUrls.contains(url)
+            val identityAlive = !BuildConfig.AIOPLAY_MODE || !deadSourceStreamKeys.contains(candidate.aioplayFailoverKey())
+            urlAlive && identityAlive
         } ?: run {
         Log.w(PlayerRuntimeController.TAG, "Dead source and no live sources after index $currentIdx; surfacing error")
         return false

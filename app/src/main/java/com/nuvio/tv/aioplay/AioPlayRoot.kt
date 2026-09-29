@@ -473,7 +473,10 @@ private fun AioPlaySignedInApp(
                     entry.savedStateHandle["aioplay_search_last_opened_item_id"] = item.id
                     navController.navigate(detailRoute(item))
                 },
-                onSection = viewModel::selectSection,
+                onSection = { section ->
+                    viewModel.selectSection(section)
+                    navController.popBackStack(HOME_ROUTE, inclusive = false)
+                },
                 onSettings = { navController.navigate(SETTINGS_ROUTE) },
                 onBack = {
                     navController.previousBackStackEntry?.savedStateHandle?.let { homeState ->

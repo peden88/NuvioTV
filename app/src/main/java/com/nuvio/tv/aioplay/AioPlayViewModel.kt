@@ -30,7 +30,7 @@ data class AioPlayUiState(
     val loginBusy: Boolean = false,
     val user: AioPlayUser? = null,
     val capabilities: AioPlayCapabilities? = null,
-    val selectedSection: AioPlaySection = AioPlaySection.LIVE,
+    val selectedSection: AioPlaySection = AioPlaySection.VOD,
     val catalogs: List<AioPlayCatalog> = emptyList(),
     val selectedCatalogId: String? = null,
     val items: List<AioPlayItem> = emptyList(),
@@ -341,12 +341,9 @@ class AioPlayViewModel @Inject constructor(
         runCatching { api.library(activeToken) }.onSuccess { libraryItems = it }
         runCatching { api.watchState(activeToken) }.onSuccess { watchedItems = it }
 
-        liveCatalogs = if (capabilities.sportsEnabled) {
-            api.catalogs(activeToken)
-                .filter { it.type.equals("tv", ignoreCase = true) }
-        } else {
-            emptyList()
-        }
+        // Live is intentionally retired from AIOPlay. Keep the legacy enum/backend
+        // branches dormant for compatibility, but do not fetch or select Live at startup.
+        liveCatalogs = emptyList()
 
         vodCatalogs = if (capabilities.vodEnabled) {
             runCatching { api.vodCatalogs(activeToken) }.getOrDefault(emptyList())
@@ -354,18 +351,9 @@ class AioPlayViewModel @Inject constructor(
             emptyList()
         }
 
-        val initialSection = when {
-            liveCatalogs.isNotEmpty() -> AioPlaySection.LIVE
-            vodCatalogs.isNotEmpty() -> AioPlaySection.VOD
-            else -> AioPlaySection.LIVE
-        }
+        val initialSection = AioPlaySection.VOD
         val initialCatalogs = catalogsFor(initialSection)
-        val preferred = if (initialSection == AioPlaySection.LIVE) {
-            initialCatalogs.firstOrNull { it.id == "nuvio_sports_live" }
-                ?: initialCatalogs.firstOrNull()
-        } else {
-            initialCatalogs.firstOrNull()
-        }
+        val preferred = initialCatalogs.firstOrNull()
 
         _state.value = AioPlayUiState(
             checkingSession = false,

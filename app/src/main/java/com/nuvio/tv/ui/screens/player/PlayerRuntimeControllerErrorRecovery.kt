@@ -796,6 +796,7 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
                 "host=${next.getStreamUrl()?.safeHost()}"
     )
     val savedPosition = _exoPlayer?.currentPosition?.takeIf { it > 0L } ?: 0L
+    if (BuildConfig.AIOPLAY_MODE) pendingAioPlayFailoverPaused = _exoPlayer?.playWhenReady == false
     val resumePosition = if (BuildConfig.AIOPLAY_MODE && savedPosition > 0L) {
         (savedPosition - AIOPLAY_FAILOVER_REWIND_MS).coerceAtLeast(0L)
     } else savedPosition

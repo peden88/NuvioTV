@@ -787,6 +787,8 @@ internal fun PlayerRuntimeController.switchToSourceStream(
 
     // Stop any active torrent before switching to HTTP stream
     stopTorrentStream()
+    val startPausedAfterFailover = com.nuvio.tv.BuildConfig.AIOPLAY_MODE && pendingAioPlayFailoverPaused
+    pendingAioPlayFailoverPaused = false
 
     nextEpisodeAutoPlayJob?.cancel()
     nextEpisodeAutoPlayJob = null
@@ -890,14 +892,14 @@ internal fun PlayerRuntimeController.switchToSourceStream(
                         audioDelayUsProvider = audioDelayUs::get
                     )
                 )
-                player.playWhenReady = true
+                player.playWhenReady = !startPausedAfterFailover
                 player.prepare()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message ?: context.getString(com.nuvio.tv.R.string.player_error_play_stream_failed)) }
             }
         }
     } ?: run {
-        initializePlayer(playbackUrl, playbackHeaders)
+        initializePlayer(playbackUrl, playbackHeaders, startPaused = startPausedAfterFailover)
     }
 
     loadSavedProgressFor(currentSeason, currentEpisode)

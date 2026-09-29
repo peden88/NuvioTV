@@ -717,6 +717,7 @@ class PlayerRuntimeController(
     internal val deadSourceStreamKeys: MutableSet<String> = mutableSetOf()
     internal var deadSourceFailoverCount: Int = 0
     internal var aioPlayExhaustionRefreshAttempted: Boolean = false
+    internal var pendingAioPlayFailoverPaused: Boolean = false
     internal var hasRetriedAfterMimeOverrideClear: Boolean = false
     internal var isMapDv7ToHevcActiveForCurrentPlayback: Boolean = false
     internal var isManualDv81Mode2ActiveForCurrentPlayback: Boolean = false

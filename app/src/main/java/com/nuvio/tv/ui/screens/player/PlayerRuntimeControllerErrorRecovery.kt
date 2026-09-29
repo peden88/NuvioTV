@@ -763,6 +763,27 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
             val identityAlive = !BuildConfig.AIOPLAY_MODE || !deadSourceStreamKeys.contains(candidate.aioplayFailoverKey())
             urlAlive && identityAlive
         } ?: run {
+        if (BuildConfig.AIOPLAY_MODE && !aioPlayExhaustionRefreshAttempted) {
+            aioPlayExhaustionRefreshAttempted = true
+            Log.w(PlayerRuntimeController.TAG, "AIOPlay source list exhausted; refreshing AIOStreams once")
+            scope.launch {
+                _uiState.update {
+                    it.copy(
+                        error = null,
+                        showPauseOverlay = false,
+                        showLoadingOverlay = it.loadingOverlayEnabled,
+                        loadingMessage = "Refreshing AIOStreams…"
+                    )
+                }
+                loadSourceStreams(forceRefresh = true)
+                sourceStreamsJob?.join()
+                val recovered = advanceToNextLiveSource(detailedError)
+                if (!recovered) {
+                    _uiState.update { it.copy(error = detailedError, isBuffering = false) }
+                }
+            }
+            return true
+        }
         Log.w(PlayerRuntimeController.TAG, "Dead source and no live sources after index $currentIdx; surfacing error")
         return false
     }

@@ -1282,12 +1282,16 @@ fun PlayerScreen(
                 onSeekTo = { viewModel.onEvent(PlayerEvent.OnSeekTo(it)) },
                 onShowEpisodesPanel = { viewModel.onEvent(PlayerEvent.OnShowEpisodesPanel) },
                 onShowSourcesPanel = { viewModel.onEvent(PlayerEvent.OnShowSourcesPanel) },
-                onRequestAlternateSource = onRequestAlternateSource?.let { callback ->
-                    {
-                        if (!exitDispatched) {
-                            exitDispatched = true
-                            viewModel.stopAndRelease()
-                            callback()
+                onRequestAlternateSource = if (BuildConfig.AIOPLAY_MODE) {
+                    { viewModel.tryNextAioPlaySource() }
+                } else {
+                    onRequestAlternateSource?.let { callback ->
+                        {
+                            if (!exitDispatched) {
+                                exitDispatched = true
+                                viewModel.stopAndRelease()
+                                callback()
+                            }
                         }
                     }
                 },

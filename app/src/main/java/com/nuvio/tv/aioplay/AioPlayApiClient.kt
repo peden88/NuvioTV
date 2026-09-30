@@ -435,19 +435,26 @@ class AioPlayApiClient @Inject constructor(
             }
         }
         val json = requestJson("/api/v1/vod/search$suffix", token = token)
-        if (!peopleOnly) return parseItems(json, type.orEmpty())
-        val catalogs = json.optJSONArray("catalogs") ?: return emptyList()
+        val catalogs = json.optJSONArray("catalogs")
+        if (catalogs == null) {
+            return if (peopleOnly) emptyList() else parseItems(json, type.orEmpty())
+        }
         return buildList {
             val seen = mutableSetOf<String>()
             for (i in 0 until catalogs.length()) {
                 val catalog = catalogs.optJSONObject(i) ?: continue
                 val catalogName = catalog.optString("catalogName").ifBlank { catalog.optString("name") }
-                if (!catalogName.lowercase().contains("people search")) continue
+                val isPeopleCatalog = catalogName.contains("people search", ignoreCase = true)
+                if (peopleOnly != isPeopleCatalog) continue
                 val rows = catalog.optJSONArray("metas") ?: continue
                 for (j in 0 until rows.length()) {
                     val item = parseItem(rows.optJSONObject(j), catalog.optString("type")) ?: continue
                     if (seen.add(item.type + "|" + item.id)) add(item)
                 }
+            }
+            // Some metadata servers supply only a flattened metas array.
+            if (isEmpty() && !peopleOnly && catalogs.length() == 0) {
+                addAll(parseItems(json, type.orEmpty()))
             }
         }
     }

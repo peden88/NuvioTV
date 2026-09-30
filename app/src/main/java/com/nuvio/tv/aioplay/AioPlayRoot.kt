@@ -965,9 +965,9 @@ private fun AioPlaySearchScreen(
         loading = true
         error = null
         val type = if (personName.isNotBlank()) null else selectedType.takeIf { it == "movie" || it == "series" }
-        viewModel.searchVod(clean, type)
+        viewModel.searchVod(clean, type, peopleOnly = personName.isNotBlank())
             .onSuccess { rows ->
-                results = if (selectedType == "anime") {
+                results = if (personName.isBlank() && selectedType == "anime") {
                     rows.filter { item ->
                         item.genres.any { genre -> genre.equals("anime", ignoreCase = true) } ||
                             item.type.equals("anime", ignoreCase = true)
@@ -976,7 +976,7 @@ private fun AioPlaySearchScreen(
                     rows
                 }
                 windowStartRow = 0
-                pendingHeroItem = rows.firstOrNull()
+                pendingHeroItem = results.firstOrNull()
             }
             .onFailure { throwable ->
                 error = throwable.message ?: "Search is unavailable right now."
@@ -1178,8 +1178,8 @@ private fun AioPlaySearchScreen(
                     query.trim().length < 2 -> "Type at least two characters"
                     loading && results.isEmpty() -> "Searching…"
                     error != null -> error.orEmpty()
-                    results.isEmpty() -> "No matching titles"
-                    else -> results.size.toString() + " results"
+                    results.isEmpty() -> if (personName.isNotBlank()) "No titles found in People Search" else "No matching titles"
+                    else -> results.size.toString() + if (personName.isNotBlank()) " People Search results" else " results"
                 }
                 Text(
                     text = statusText,

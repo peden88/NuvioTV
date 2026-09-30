@@ -1236,9 +1236,9 @@ private fun AioPlaySearchScreen(
                     val rowHeight = (maxHeight - rowSpacing) / 2
                     val cardWidth = (maxWidth - (columnSpacing * (columns - 1))) / columns
                     val posterHeight = cardWidth * 1.5f
-                    val searchCardHeight = posterHeight + 24.dp
-                    // Keep both complete 2:3 poster rows inside the available search viewport.
+                    // Keep two complete 2:3 poster rows inside the search viewport.
                     val fittedPosterHeight = minOf(posterHeight, (rowHeight - 24.dp).coerceAtLeast(48.dp))
+                    val fittedPosterWidth = fittedPosterHeight * (2f / 3f)
 
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -1266,6 +1266,7 @@ private fun AioPlaySearchScreen(
                                         if (item != null) {
                                             val requester =
                                                 resultFocusRequesters[item.type + "|" + item.id]
+                                            Box(Modifier.width(fittedPosterWidth)) {
                                             AioPlayContentCard(
                                                 item = item,
                                                 section = AioPlaySection.VOD,
@@ -1273,6 +1274,7 @@ private fun AioPlaySearchScreen(
                                                 posterCardHeight = fittedPosterHeight,
                                                 onClick = { onResult(item) },
                                                 modifier = Modifier
+                                                    .width(fittedPosterWidth)
                                                     .then(
                                                         if (requester != null) {
                                                             Modifier.focusRequester(requester)
@@ -1333,6 +1335,7 @@ private fun AioPlaySearchScreen(
                                                         }
                                                     }
                                             )
+                                            }
                                         }
                                     }
                                 }

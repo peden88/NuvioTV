@@ -473,6 +473,9 @@ private fun AioPlaySignedInApp(
             val searchPersonPhoto by entry.savedStateHandle
                 .getStateFlow("aioplay_search_person_photo", "")
                 .collectAsState()
+            val searchPersonTmdbId by entry.savedStateHandle
+                .getStateFlow("aioplay_search_person_tmdb_id", 0L)
+                .collectAsState()
             val originType by entry.savedStateHandle
                 .getStateFlow("aioplay_search_origin_type", "")
                 .collectAsState()
@@ -499,6 +502,7 @@ private fun AioPlaySignedInApp(
                 initialPersonName = searchPersonName,
                 initialPersonRole = searchPersonRole,
                 initialPersonPhoto = searchPersonPhoto,
+                initialPersonTmdbId = searchPersonTmdbId,
                 onClearPerson = {
                     if (originType.isNotBlank() && originId.isNotBlank()) {
                         navController.navigate(detailRoute(AioPlayItem(
@@ -522,6 +526,7 @@ private fun AioPlaySignedInApp(
                     entry.savedStateHandle["aioplay_search_person_name"] = ""
                     entry.savedStateHandle["aioplay_search_person_role"] = ""
                     entry.savedStateHandle["aioplay_search_person_photo"] = ""
+                    entry.savedStateHandle["aioplay_search_person_tmdb_id"] = 0L
                 },
                 onResult = { item ->
                     entry.savedStateHandle["aioplay_search_last_opened_item_id"] = item.id
@@ -621,6 +626,7 @@ private fun AioPlaySignedInApp(
                         searchState["aioplay_search_person_name"] = name
                         searchState["aioplay_search_person_role"] = role
                         searchState["aioplay_search_person_photo"] = photo.orEmpty()
+                        searchState["aioplay_search_person_tmdb_id"] = 0L
                         searchState["aioplay_search_origin_type"] = preview.type
                         searchState["aioplay_search_origin_id"] = preview.id
                         searchState["aioplay_search_origin_title"] = preview.name
@@ -955,6 +961,7 @@ private fun AioPlaySearchScreen(
     initialPersonName: String,
     initialPersonRole: String,
     initialPersonPhoto: String,
+    initialPersonTmdbId: Long,
     onClearPerson: () -> Unit,
     onPersonContextConsumed: () -> Unit,
     onResult: (AioPlayItem) -> Unit,
@@ -971,6 +978,7 @@ private fun AioPlaySearchScreen(
     var personPhoto by rememberSaveable { mutableStateOf(initialPersonPhoto) }
     var personCreditFilter by rememberSaveable { mutableStateOf("all") }
     var results by remember { mutableStateOf<List<AioPlayItem>>(emptyList()) }
+    var filmography by remember { mutableStateOf<List<AioPlayItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var windowStartRow by rememberSaveable { mutableStateOf(0) }
@@ -1009,6 +1017,14 @@ private fun AioPlaySearchScreen(
         }
     }
 
+    LaunchedEffect(initialPersonTmdbId, personName) {
+        if (initialPersonTmdbId > 0L && personName.isNotBlank()) {
+            viewModel.personCredits(initialPersonTmdbId).onSuccess { filmography = it }
+        } else {
+            filmography = emptyList()
+        }
+    }
+
     LaunchedEffect(query, selectedType, personName) {
         val clean = (personName.takeIf { it.isNotBlank() } ?: query).trim()
         if (clean.length < 2) {
@@ -1030,7 +1046,9 @@ private fun AioPlaySearchScreen(
         val type = if (personName.isNotBlank()) null else selectedType.takeIf { it == "movie" || it == "series" }
         viewModel.searchVod(clean, type, peopleOnly = personName.isNotBlank())
             .onSuccess { rows ->
-                results = if (personName.isBlank() && selectedType == "anime") {
+                results = if (personName.isNotBlank() && filmography.isNotEmpty()) {
+                    filmography
+                } else if (personName.isBlank() && selectedType == "anime") {
                     rows.filter { item ->
                         item.genres.any { genre -> genre.equals("anime", ignoreCase = true) } ||
                             item.type.equals("anime", ignoreCase = true)

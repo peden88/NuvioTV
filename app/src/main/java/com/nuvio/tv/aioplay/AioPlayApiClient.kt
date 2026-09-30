@@ -459,9 +459,10 @@ class AioPlayApiClient @Inject constructor(
         }
     }
 
-    suspend fun personCredits(token: String, personId: Long): List<AioPlayItem> {
-        if (personId <= 0L) return emptyList()
-        val json = requestJson("/api/v1/vod/person/" + personId, token = token)
+    suspend fun personCredits(token: String, personId: Long, personName: String): List<AioPlayItem> {
+        if (personId <= 0L && personName.isBlank()) return emptyList()
+        val suffix = if (personName.isNotBlank()) "?name=" + URLEncoder.encode(personName, "UTF-8") else ""
+        val json = requestJson("/api/v1/vod/person/" + personId + suffix, token = token)
         val rows = json.optJSONArray("credits") ?: return emptyList()
         return buildList {
             val seen = mutableSetOf<String>()

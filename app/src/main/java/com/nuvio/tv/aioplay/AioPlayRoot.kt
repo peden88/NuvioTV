@@ -1018,8 +1018,8 @@ private fun AioPlaySearchScreen(
     }
 
     LaunchedEffect(initialPersonTmdbId, personName) {
-        if (initialPersonTmdbId > 0L && personName.isNotBlank()) {
-            viewModel.personCredits(initialPersonTmdbId).onSuccess { filmography = it }
+        if (personName.isNotBlank()) {
+            viewModel.personCredits(initialPersonTmdbId, personName).onSuccess { filmography = it }
         } else {
             filmography = emptyList()
         }

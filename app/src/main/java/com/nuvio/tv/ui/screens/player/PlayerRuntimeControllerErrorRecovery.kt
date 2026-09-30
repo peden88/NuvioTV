@@ -711,6 +711,22 @@ internal fun PlayerRuntimeController.attemptDeadSourceFailover(
  * of options (cap reached or no live sources left) so the caller surfaces the
  * error screen.
  */
+private fun com.nuvio.tv.domain.model.Stream.stableFailoverKey(): String {
+    val hash = infoHash ?: clientResolve?.infoHash
+    if (!hash.isNullOrBlank()) return "$addonName|hash:${hash.lowercase()}|file:${fileIdx ?: clientResolve?.fileIdx ?: -1}"
+    val filename = behaviorHints?.filename ?: clientResolve?.stream?.raw?.filename
+    if (!filename.isNullOrBlank()) return "$addonName|file:${filename.lowercase()}"
+    val url = getStreamUrl()
+    if (!url.isNullOrBlank()) {
+        val stableUrl = runCatching {
+            val parsed = java.net.URI(url)
+            java.net.URI(parsed.scheme, parsed.authority, parsed.path, null, null).toString()
+        }.getOrDefault(url.substringBefore('?'))
+        return "$addonName|url:$stableUrl"
+    }
+    return "$addonName|meta:${name.orEmpty()}|${title.orEmpty()}|${description.orEmpty().hashCode()}"
+}
+
 internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: String): Boolean {
     // Mark dead: both the resolved playback URL and, where identifiable, the
     // original list entry (debrid resolution can make these differ) so the
@@ -727,7 +743,10 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
         currentStreamName = state.currentStreamName
     )
     if (currentIdx >= 0) {
-        streams.getOrNull(currentIdx)?.getStreamUrl()?.let { deadSourceStreamUrls.add(it) }
+        streams.getOrNull(currentIdx)?.let { failed ->
+            failed.getStreamUrl()?.let { deadSourceStreamUrls.add(it) }
+            deadSourceStreamKeys.add(failed.stableFailoverKey())
+        }
     }
     _uiState.update { it.copy(deadSourceStreamUrls = deadSourceStreamUrls.toSet()) }
 
@@ -745,7 +764,8 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
         .map { streams[it] }
         .firstOrNull { candidate ->
             val url = candidate.getStreamUrl()
-            url == null || !deadSourceStreamUrls.contains(url)
+            (url == null || !deadSourceStreamUrls.contains(url)) &&
+                !deadSourceStreamKeys.contains(candidate.stableFailoverKey())
         } ?: run {
         Log.w(PlayerRuntimeController.TAG, "Dead source and no live sources after index $currentIdx; surfacing error")
         return false

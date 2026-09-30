@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
@@ -354,14 +355,16 @@ private fun AioPlayMetadataSummary(meta: Meta, onSearchPerson: (String, String) 
                 style = MaterialTheme.typography.titleMedium,
                 color = NuvioTheme.colors.TextPrimary
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                meta.castMembers.take(8).forEach { member ->
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(meta.castMembers.take(12).size) { index ->
+                    val member = meta.castMembers[index]
                     Button(onClick = { onSearchPerson(member.name, member.character ?: "Cast") }) {
                         Text(member.name, maxLines = 1)
                     }
                 }
                 if (meta.castMembers.isEmpty()) {
-                    meta.cast.take(8).forEach { name ->
+                    items(meta.cast.take(12).size) { index ->
+                        val name = meta.cast[index]
                         Button(onClick = { onSearchPerson(name, "Cast") }) { Text(name, maxLines = 1) }
                     }
                 }

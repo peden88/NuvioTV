@@ -1,0 +1,81 @@
+name: AIOPlay TV CI
+
+on:
+  push:
+    branches:
+      - feature/aioplay-tv
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: aioplay-tv-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build AIOPlay TV debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Create CI properties
+        run: |
+          printf '%s\n' \
+            'NUVIO_SUPABASE_URL=https://ci.invalid.example' \
+            'NUVIO_SUPABASE_ANON_KEY=ci-placeholder' \
+            'AIOPLAY_API_BASE_URL=https://aioplay.peden88.stream' \
+            > local.properties
+
+      - name: Build AIOPlay TV
+        run: ./gradlew :app:assembleAioplayDebug -PaioplayStreamerOnly=true --stacktrace --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: aioplay-tv-debug-${{ github.sha }}
+          path: app/build/outputs/apk/aioplay/debug/*armeabi-v7a*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish stable Downloader APK
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK_PATH="$(find app/build/outputs/apk/aioplay/debug -maxdepth 1 -type f -name '*armeabi-v7a*.apk' | head -n 1)"
+          test -n "$APK_PATH"
+          cp "$APK_PATH" AIOPlay-TV.apk
+          sha256sum AIOPlay-TV.apk > AIOPlay-TV.sha256
+
+          if ! gh release view aioplay-tv-latest >/dev/null 2>&1; then
+            gh release create aioplay-tv-latest \
+              --title "AIOPlay TV Latest" \
+              --notes "Rolling AIOPlay TV debug build. The AIOPlay-TV.apk asset is replaced after each successful build from feature/aioplay-tv." \
+              --target "$GITHUB_SHA" \
+              --prerelease
+          fi
+
+          # Delete the rolling assets by name through gh itself. This avoids
+          # mixing GraphQL/node asset IDs with the numeric REST asset ID.
+          for asset_name in AIOPlay-TV.apk AIOPlay-TV.sha256; do
+            gh release delete-asset aioplay-tv-latest "$asset_name" --yes >/dev/null 2>&1 || true
+          done
+
+          gh release upload aioplay-tv-latest AIOPlay-TV.apk AIOPlay-TV.sha256

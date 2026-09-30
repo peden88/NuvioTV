@@ -20,6 +20,8 @@ internal data class PlayerNavigationArgs(
     val initialSeason: Int?,
     val initialEpisode: Int?,
     val initialEpisodeTitle: String?,
+    val aioplayResumePositionMs: Long?,
+    val aioplayResumeDurationMs: Long?,
     val bingeGroup: String?,
     val filename: String?,
     val videoHash: String?,
@@ -81,6 +83,12 @@ internal data class PlayerNavigationArgs(
                 initialSeason = savedStateHandle.get<String>("season")?.toIntOrNull(),
                 initialEpisode = savedStateHandle.get<String>("episode")?.toIntOrNull(),
                 initialEpisodeTitle = decodedOrNull("episodeTitle"),
+                aioplayResumePositionMs = savedStateHandle.get<String>("aioplayResumePositionMs")
+                    ?.toLongOrNull()
+                    ?.takeIf { it > 0L },
+                aioplayResumeDurationMs = savedStateHandle.get<String>("aioplayResumeDurationMs")
+                    ?.toLongOrNull()
+                    ?.takeIf { it > 0L },
                 bingeGroup = savedStateHandle.get<String>("bingeGroup")?.takeIf { it.isNotEmpty() },
                 filename = decodedOrNull("filename"),
                 videoHash = savedStateHandle.get<String>("videoHash")?.takeIf { it.isNotEmpty() },

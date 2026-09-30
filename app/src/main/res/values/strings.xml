@@ -1943,6 +1943,8 @@
     <string name="still_watching_threshold_sub">Number of auto-played episodes before prompting.</string>
     <string name="skip_intro">Skip Intro</string>
     <string name="skip_ending">Skip Ending</string>
+    <string name="skip_movie_credits">Skip Credits</string>
+    <string name="skip_post_credits">Skip Post-Credits</string>
     <string name="skip_recap">Skip Recap</string>
     <string name="skip_generic">Skip</string>
     <string name="display_mode_refresh">Refresh</string>

@@ -576,6 +576,58 @@ internal suspend fun PlayerRuntimeController.loadSavedProgressSuspend(season: In
         watchProgressRepository.getProgress(progressContentId!!).firstOrNull()
     }
 
+    val explicitPosition = navigationArgs.aioplayResumePositionMs
+    val explicitMatchesCurrentItem = explicitPosition != null && explicitPosition > 0L &&
+        when {
+            navigationArgs.initialSeason != null && navigationArgs.initialEpisode != null ->
+                season == navigationArgs.initialSeason && episode == navigationArgs.initialEpisode
+            else -> season == null && episode == null
+        }
+
+    if (explicitMatchesCurrentItem) {
+        val explicitDuration = navigationArgs.aioplayResumeDurationMs ?: progress?.duration ?: 0L
+        val base = progress
+        pendingResumeProgress = if (base != null) {
+            base.copy(
+                position = explicitPosition,
+                duration = explicitDuration.takeIf { it > 0L } ?: base.duration,
+                progressPercent = if (explicitDuration > 0L) {
+                    (explicitPosition.toFloat() / explicitDuration.toFloat() * 100f).coerceIn(0f, 100f)
+                } else {
+                    base.progressPercent
+                }
+            )
+        } else {
+            WatchProgress(
+                contentId = progressContentId!!,
+                contentType = contentType ?: if (season != null) "series" else "movie",
+                name = contentName ?: title,
+                poster = poster,
+                backdrop = backdrop,
+                logo = logo,
+                videoId = currentVideoId ?: progressContentId,
+                season = season,
+                episode = episode,
+                episodeTitle = currentEpisodeTitle,
+                position = explicitPosition,
+                duration = explicitDuration,
+                lastWatched = System.currentTimeMillis(),
+                progressPercent = if (explicitDuration > 0L) {
+                    (explicitPosition.toFloat() / explicitDuration.toFloat() * 100f).coerceIn(0f, 100f)
+                } else {
+                    null
+                },
+                source = "aioplay_shared"
+            )
+        }
+        Log.d(
+            PlayerRuntimeController.TAG,
+            "loadSavedProgressSuspend: using AIOPlay shared resume " +
+                "position=$explicitPosition duration=$explicitDuration S${season}E${episode}"
+        )
+        return
+    }
+
     progress?.let { saved ->
         if (saved.isInProgress()) {
             pendingResumeProgress = saved

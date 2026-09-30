@@ -1,0 +1,3557 @@
+@file:OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)
+
+package com.nuvio.tv.aioplay
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import androidx.tv.material3.Border
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
+import androidx.tv.material3.Text
+import coil3.compose.AsyncImage
+import com.nuvio.tv.R
+import com.nuvio.tv.domain.model.CardDepthSurface
+import com.nuvio.tv.ui.components.FocusMarqueeText
+import com.nuvio.tv.ui.components.LocalCardDepthStyle
+import com.nuvio.tv.ui.components.PosterCardDefaults
+import com.nuvio.tv.ui.components.nuvioCardDepth
+import com.nuvio.tv.ui.screens.account.InputField
+import com.nuvio.tv.ui.screens.player.PlayerScreen
+import com.nuvio.tv.ui.screens.settings.PlaybackSettingsScreen
+import com.nuvio.tv.ui.theme.NuvioTheme
+import android.view.KeyEvent as AndroidKeyEvent
+import java.net.URLEncoder
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+
+private const val HOME_ROUTE = "aioplay_home"
+
+private enum class AioPlayHomeFocusZone {
+    TOP,
+    NAV,
+    CONTENT
+}
+
+private data class AioPlayHomeFocusMemory(
+    val zone: AioPlayHomeFocusZone,
+    val key: String?,
+    val windowStartRow: Int
+)
+
+private const val SETTINGS_ROUTE = "aioplay_settings"
+private const val ACCOUNT_ROUTE = "aioplay_account"
+private const val SEARCH_ROUTE = "aioplay_search"
+private const val DETAIL_ROUTE =
+    "aioplay_detail?itemId={itemId}&itemType={itemType}&title={title}&poster={poster}&backdrop={backdrop}&logo={logo}"
+private const val SERIES_ROUTE =
+    "aioplay_series?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}&logo={logo}"
+private const val LOADING_ROUTE =
+    "aioplay_loading?itemId={itemId}&title={title}&poster={poster}&backdrop={backdrop}&logo={logo}&contentType={contentType}&sessionId={sessionId}&parentId={parentId}&parentName={parentName}&season={season}&episode={episode}&episodeTitle={episodeTitle}&resumePositionMs={resumePositionMs}&resumeDurationMs={resumeDurationMs}"
+private const val PLAYER_ROUTE =
+    "aioplay_player?streamUrl={streamUrl}&title={title}&headers={headers}&contentId={contentId}&contentType={contentType}&contentName={contentName}&poster={poster}&backdrop={backdrop}&logo={logo}&videoId={videoId}&season={season}&episode={episode}&episodeTitle={episodeTitle}&aioplayResumePositionMs={aioplayResumePositionMs}&aioplayResumeDurationMs={aioplayResumeDurationMs}&aioplaySessionId={aioplaySessionId}&aioplayContentType={aioplayContentType}"
+
+private fun encode(value: String?): String =
+    URLEncoder.encode(value.orEmpty(), "UTF-8").replace("+", "%20")
+
+private fun loadingRoute(
+    item: AioPlayItem,
+    contentType: String,
+    sessionId: String = ""
+): String =
+    "aioplay_loading" +
+        "?itemId=" + encode(item.id) +
+        "&title=" + encode(item.name) +
+        "&poster=" + encode(item.poster) +
+        "&backdrop=" + encode(item.background) +
+        "&logo=" + encode(item.logo) +
+        "&contentType=" + encode(contentType) +
+        "&sessionId=" + encode(sessionId) +
+        "&parentId=" + encode(item.parentId) +
+        "&parentName=" + encode(item.parentName) +
+        "&season=" + encode(item.season?.toString()) +
+        "&episode=" + encode(item.episode?.toString()) +
+        "&episodeTitle=" + encode(item.episodeTitle) +
+        "&resumePositionMs=" + encode(item.resumePositionMs?.toString()) +
+        "&resumeDurationMs=" + encode(item.resumeDurationMs?.toString())
+
+private fun detailRoute(item: AioPlayItem): String =
+    "aioplay_detail" +
+        "?itemId=" + encode(item.id) +
+        "&itemType=" + encode(item.type) +
+        "&title=" + encode(item.name) +
+        "&poster=" + encode(item.poster) +
+        "&backdrop=" + encode(item.background) +
+        "&logo=" + encode(item.logo)
+
+private fun seriesRoute(item: AioPlayItem): String =
+    "aioplay_series" +
+        "?itemId=" + encode(item.id) +
+        "&title=" + encode(item.name) +
+        "&poster=" + encode(item.poster) +
+        "&backdrop=" + encode(item.background) +
+        "&logo=" + encode(item.logo)
+
+private fun playerRoute(
+    item: AioPlayItem,
+    contentType: String,
+    playback: AioPlayPlayback
+): String {
+    val headers = JSONObject(playback.target.requestHeaders).toString()
+    val trackingContentType = when (contentType.lowercase()) {
+        "episode" -> "series"
+        "movie" -> "movie"
+        else -> "tv"
+    }
+    val trackingContentId = item.parentId ?: item.id
+    val trackingContentName = item.parentName ?: item.name
+    val displayTitle = item.episodeTitle ?: item.name
+    return "aioplay_player" +
+        "?streamUrl=" + encode(playback.target.url) +
+        "&title=" + encode(displayTitle) +
+        "&headers=" + encode(headers) +
+        "&contentId=" + encode(trackingContentId) +
+        "&contentType=" + encode(trackingContentType) +
+        "&contentName=" + encode(trackingContentName) +
+        "&poster=" + encode(item.poster) +
+        "&backdrop=" + encode(item.background) +
+        "&logo=" + encode(item.logo) +
+        "&videoId=" + encode(item.id) +
+        "&season=" + encode(item.season?.toString()) +
+        "&episode=" + encode(item.episode?.toString()) +
+        "&episodeTitle=" + encode(item.episodeTitle) +
+        "&aioplayResumePositionMs=" + encode(item.resumePositionMs?.toString()) +
+        "&aioplayResumeDurationMs=" + encode(item.resumeDurationMs?.toString()) +
+        "&aioplaySessionId=" + encode(playback.sessionId) +
+        "&aioplayContentType=" + encode(contentType)
+}
+
+@Composable
+fun AioPlayRoot(
+    onExit: () -> Unit,
+    viewModel: AioPlayViewModel = hiltViewModel()
+) {
+    val state by viewModel.state.collectAsState()
+
+    NuvioTheme {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AioPlayBackgroundGradient)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                colors = SurfaceDefaults.colors(containerColor = Color.Transparent)
+            ) {
+                when {
+                    state.checkingSession -> AioPlayCenteredStatus("Signing in…")
+                    !state.signedIn -> AioPlayLoginScreen(
+                        busy = state.loginBusy,
+                        error = state.error,
+                        onSignIn = viewModel::signIn,
+                        onExit = onExit
+                    )
+                    else -> AioPlaySignedInApp(
+                        state = state,
+                        viewModel = viewModel
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayLoginScreen(
+    busy: Boolean,
+    error: String?,
+    onSignIn: (String, String) -> Unit,
+    onExit: () -> Unit
+) {
+    BackHandler(onBack = onExit)
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    val usernameFocus = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        runCatching { usernameFocus.requestFocus() }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AioPlayBackgroundGradient),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .width(480.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(AioPlayDetailCard)
+                .padding(34.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.aioplay_brand),
+                contentDescription = "AIOPlay",
+                modifier = Modifier
+                    .width(104.dp)
+                    .aspectRatio(1f)
+                    .align(Alignment.CenterHorizontally),
+                contentScale = ContentScale.Fit
+            )
+            Text(
+                text = "AIOPlay",
+                style = MaterialTheme.typography.headlineMedium,
+                color = NuvioTheme.colors.TextPrimary,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "Sign in to AIOPlay.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = NuvioTheme.colors.TextSecondary
+            )
+
+            InputField(
+                value = username,
+                onValueChange = { username = it },
+                placeholder = "Username",
+                keyboardType = KeyboardType.Text,
+                imeAction = ImeAction.Next,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(usernameFocus)
+            )
+
+            InputField(
+                value = password,
+                onValueChange = { password = it },
+                placeholder = "Password",
+                keyboardType = KeyboardType.Password,
+                isPassword = true,
+                imeAction = ImeAction.Done,
+                onImeAction = {
+                    if (!busy && username.isNotBlank() && password.isNotBlank()) {
+                        onSignIn(username, password)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (!error.isNullOrBlank()) {
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NuvioTheme.colors.Error
+                )
+            }
+
+            Button(
+                onClick = { onSignIn(username, password) },
+                enabled = !busy && username.isNotBlank() && password.isNotBlank(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (busy) "Signing in…" else "Sign in")
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlaySignedInApp(
+    state: AioPlayUiState,
+    viewModel: AioPlayViewModel
+) {
+    val navController = rememberNavController()
+
+    NavHost(
+        navController = navController,
+        startDestination = HOME_ROUTE
+    ) {
+        composable(HOME_ROUTE) { entry ->
+            val restoreContentItemId by entry.savedStateHandle
+                .getStateFlow("aioplay_home_restore_item_id", "")
+                .collectAsState()
+            val restoreContentFocusToken by entry.savedStateHandle
+                .getStateFlow("aioplay_home_restore_focus_token", 0)
+                .collectAsState()
+            val restoreUniversalZone by entry.savedStateHandle
+                .getStateFlow("aioplay_home_memory_zone", "")
+                .collectAsState()
+            val restoreUniversalKey by entry.savedStateHandle
+                .getStateFlow("aioplay_home_memory_key", "")
+                .collectAsState()
+            val restoreUniversalWindowStart by entry.savedStateHandle
+                .getStateFlow("aioplay_home_memory_window_start", 0)
+                .collectAsState()
+            val restoreUniversalFocusToken by entry.savedStateHandle
+                .getStateFlow("aioplay_home_memory_restore_token", 0)
+                .collectAsState()
+
+            AioPlayHomeScreen(
+                state = state,
+                restoreContentItemId = restoreContentItemId.takeIf { it.isNotBlank() },
+                restoreContentFocusToken = restoreContentFocusToken,
+                restoreUniversalZone = restoreUniversalZone.takeIf { it.isNotBlank() },
+                restoreUniversalKey = restoreUniversalKey.takeIf { it.isNotBlank() },
+                restoreUniversalWindowStart = restoreUniversalWindowStart,
+                restoreUniversalFocusToken = restoreUniversalFocusToken,
+                onSection = viewModel::selectSection,
+                onCatalog = viewModel::selectCatalog,
+                onCollectionFolder = viewModel::openCollectionFolder,
+                onCollectionBack = viewModel::closeCollectionFolder,
+                onItem = { item ->
+                    entry.savedStateHandle["aioplay_home_last_opened_item_id"] = item.id
+                    when (state.selectedSection) {
+                        AioPlaySection.LIVE -> {
+                            val contentType = if (
+                                state.catalogs
+                                    .firstOrNull { it.selectionKey == state.selectedCatalogId }
+                                    ?.id
+                                    ?.startsWith("nuvio_sports_channel_") == true
+                            ) {
+                                "live_channel"
+                            } else {
+                                "sport_event"
+                            }
+                            navController.navigate(loadingRoute(item, contentType))
+                        }
+                        AioPlaySection.VOD, AioPlaySection.COLLECTIONS -> {
+                            navController.navigate(detailRoute(item))
+                        }
+                        AioPlaySection.CONTINUE -> {
+                            val contentType = if (item.type.equals("episode", ignoreCase = true)) {
+                                "episode"
+                            } else {
+                                "movie"
+                            }
+                            val resumeItem = viewModel.withSharedResume(item, contentType)
+
+                            // Continue Watching normally jumps straight into playback.
+                            // Put the matching details screen underneath it so Back/exit
+                            // has the same destination as playback launched from a catalog.
+                            val detailsItem = if (contentType == "episode") {
+                                item.copy(
+                                    id = item.parentId ?: item.id,
+                                    type = "series",
+                                    name = item.parentName ?: item.name
+                                )
+                            } else {
+                                item.copy(type = "movie")
+                            }
+                            navController.navigate(detailRoute(detailsItem))
+                            navController.navigate(loadingRoute(resumeItem, contentType))
+                        }
+                        AioPlaySection.LIBRARY -> navController.navigate(detailRoute(item))
+                    }
+                },
+                onToggleLibrary = { item ->
+                    if (viewModel.isInLibrary(item)) viewModel.removeFromLibrary(item)
+                    else viewModel.addToLibrary(item)
+                },
+                isInLibrary = viewModel::isInLibrary,
+                onToggleWatched = { item -> viewModel.setWatched(item, !viewModel.isWatched(item)) },
+                isWatched = viewModel::isWatched,
+                onPrefetch = viewModel::prefetchVodMeta,
+                onSearch = { memory ->
+                    entry.savedStateHandle["aioplay_home_memory_zone"] = memory.zone.name
+                    entry.savedStateHandle["aioplay_home_memory_key"] = memory.key.orEmpty()
+                    entry.savedStateHandle["aioplay_home_memory_window_start"] = memory.windowStartRow
+                    navController.navigate(SEARCH_ROUTE)
+                },
+                onSettings = { memory ->
+                    entry.savedStateHandle["aioplay_home_memory_zone"] = memory.zone.name
+                    entry.savedStateHandle["aioplay_home_memory_key"] = memory.key.orEmpty()
+                    entry.savedStateHandle["aioplay_home_memory_window_start"] = memory.windowStartRow
+                    navController.navigate(SETTINGS_ROUTE)
+                },
+                onAccount = { memory ->
+                    entry.savedStateHandle["aioplay_home_memory_zone"] = memory.zone.name
+                    entry.savedStateHandle["aioplay_home_memory_key"] = memory.key.orEmpty()
+                    entry.savedStateHandle["aioplay_home_memory_window_start"] = memory.windowStartRow
+                    navController.navigate(ACCOUNT_ROUTE)
+                }
+            )
+        }
+
+        composable(SETTINGS_ROUTE) {
+            PlaybackSettingsScreen(
+                onBackPress = {
+                    navController.previousBackStackEntry?.savedStateHandle?.let { homeState ->
+                        val token = homeState.get<Int>("aioplay_home_memory_restore_token") ?: 0
+                        homeState["aioplay_home_memory_restore_token"] = token + 1
+                    }
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(SEARCH_ROUTE) { entry ->
+            val restoreResultId by entry.savedStateHandle
+                .getStateFlow("aioplay_search_restore_item_id", "")
+                .collectAsState()
+            val restoreResultToken by entry.savedStateHandle
+                .getStateFlow("aioplay_search_restore_focus_token", 0)
+                .collectAsState()
+            val searchPersonName by entry.savedStateHandle
+                .getStateFlow("aioplay_search_person_name", "")
+                .collectAsState()
+            val searchPersonRole by entry.savedStateHandle
+                .getStateFlow("aioplay_search_person_role", "")
+                .collectAsState()
+            val searchPersonPhoto by entry.savedStateHandle
+                .getStateFlow("aioplay_search_person_photo", "")
+                .collectAsState()
+            val searchPersonTmdbId by entry.savedStateHandle
+                .getStateFlow("aioplay_search_person_tmdb_id", 0L)
+                .collectAsState()
+            val originType by entry.savedStateHandle
+                .getStateFlow("aioplay_search_origin_type", "")
+                .collectAsState()
+            val originId by entry.savedStateHandle
+                .getStateFlow("aioplay_search_origin_id", "")
+                .collectAsState()
+            val originTitle by entry.savedStateHandle
+                .getStateFlow("aioplay_search_origin_title", "")
+                .collectAsState()
+            val originPoster by entry.savedStateHandle
+                .getStateFlow("aioplay_search_origin_poster", "")
+                .collectAsState()
+            val originBackdrop by entry.savedStateHandle
+                .getStateFlow("aioplay_search_origin_backdrop", "")
+                .collectAsState()
+            val originLogo by entry.savedStateHandle
+                .getStateFlow("aioplay_search_origin_logo", "")
+                .collectAsState()
+
+            AioPlaySearchScreen(
+                viewModel = viewModel,
+                restoreResultId = restoreResultId.takeIf { it.isNotBlank() },
+                restoreResultToken = restoreResultToken,
+                initialPersonName = searchPersonName,
+                initialPersonRole = searchPersonRole,
+                initialPersonPhoto = searchPersonPhoto,
+                initialPersonTmdbId = searchPersonTmdbId,
+                onClearPerson = {
+                    if (originType.isNotBlank() && originId.isNotBlank()) {
+                        navController.navigate(detailRoute(AioPlayItem(
+                            id = originId,
+                            type = originType,
+                            name = originTitle.ifBlank { originId },
+                            description = null,
+                            poster = originPoster.takeIf { it.isNotBlank() },
+                            background = originBackdrop.takeIf { it.isNotBlank() },
+                            logo = originLogo.takeIf { it.isNotBlank() }
+                        )))
+                    }
+                    entry.savedStateHandle["aioplay_search_origin_type"] = ""
+                    entry.savedStateHandle["aioplay_search_origin_id"] = ""
+                    entry.savedStateHandle["aioplay_search_origin_title"] = ""
+                    entry.savedStateHandle["aioplay_search_origin_poster"] = ""
+                    entry.savedStateHandle["aioplay_search_origin_backdrop"] = ""
+                    entry.savedStateHandle["aioplay_search_origin_logo"] = ""
+                },
+                onPersonContextConsumed = {
+                    entry.savedStateHandle["aioplay_search_person_name"] = ""
+                    entry.savedStateHandle["aioplay_search_person_role"] = ""
+                    entry.savedStateHandle["aioplay_search_person_photo"] = ""
+                    entry.savedStateHandle["aioplay_search_person_tmdb_id"] = 0L
+                },
+                onResult = { item ->
+                    entry.savedStateHandle["aioplay_search_last_opened_item_id"] = item.id
+                    navController.navigate(detailRoute(item))
+                },
+                onSection = { section ->
+                    viewModel.selectSection(section)
+                    navController.popBackStack(HOME_ROUTE, inclusive = false)
+                },
+                onSettings = { navController.navigate(SETTINGS_ROUTE) },
+                onBack = {
+                    navController.previousBackStackEntry?.savedStateHandle?.let { homeState ->
+                        val token = homeState.get<Int>("aioplay_home_memory_restore_token") ?: 0
+                        homeState["aioplay_home_memory_restore_token"] = token + 1
+                    }
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(
+            route = DETAIL_ROUTE,
+            arguments = listOf(
+                navArgument("itemId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("itemType") { type = NavType.StringType; defaultValue = "movie" },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                navArgument("poster") { type = NavType.StringType; defaultValue = "" },
+                navArgument("backdrop") { type = NavType.StringType; defaultValue = "" },
+                navArgument("logo") { type = NavType.StringType; defaultValue = "" }
+            )
+        ) { entry ->
+            val restoreEpisodeId by entry.savedStateHandle
+                .getStateFlow("aioplay_detail_restore_episode_id", "")
+                .collectAsState()
+            val restoreEpisodeSeason by entry.savedStateHandle
+                .getStateFlow("aioplay_detail_restore_episode_season", -1)
+                .collectAsState()
+            val restoreEpisodeFocusToken by entry.savedStateHandle
+                .getStateFlow("aioplay_detail_restore_episode_focus_token", 0)
+                .collectAsState()
+            val restoreHeroFocusToken by entry.savedStateHandle
+                .getStateFlow("aioplay_detail_restore_hero_focus_token", 0)
+                .collectAsState()
+
+            val preview = AioPlayItem(
+                id = entry.arguments?.getString("itemId").orEmpty(),
+                type = entry.arguments?.getString("itemType").orEmpty().ifBlank { "movie" },
+                name = entry.arguments?.getString("title").orEmpty(),
+                description = null,
+                poster = entry.arguments?.getString("poster")?.takeIf { it.isNotBlank() },
+                background = entry.arguments?.getString("backdrop")?.takeIf { it.isNotBlank() },
+                logo = entry.arguments?.getString("logo")?.takeIf { it.isNotBlank() }
+            )
+            AioPlayDetailsScreen(
+                preview = preview,
+                viewModel = viewModel,
+                onPlay = { item, contentType ->
+                    val resumeItem = viewModel.withSharedResume(item, contentType)
+                    navController.navigate(loadingRoute(resumeItem, contentType))
+                },
+                onBack = {
+                    val previousEntry = navController.previousBackStackEntry
+                    when (previousEntry?.destination?.route) {
+                        HOME_ROUTE -> {
+                            previousEntry.savedStateHandle.let { homeState ->
+                                val token = homeState.get<Int>("aioplay_home_restore_focus_token") ?: 0
+                                val originatingItemId =
+                                    homeState.get<String>("aioplay_home_last_opened_item_id")
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?: preview.id
+                                homeState["aioplay_home_restore_item_id"] = originatingItemId
+                                homeState["aioplay_home_restore_focus_token"] = token + 1
+                            }
+                        }
+                        SEARCH_ROUTE -> {
+                            previousEntry.savedStateHandle.let { searchState ->
+                                val token = searchState.get<Int>("aioplay_search_restore_focus_token") ?: 0
+                                val originatingItemId =
+                                    searchState.get<String>("aioplay_search_last_opened_item_id")
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?: preview.id
+                                searchState["aioplay_search_restore_item_id"] = originatingItemId
+                                searchState["aioplay_search_restore_focus_token"] = token + 1
+                            }
+                        }
+                    }
+                    navController.popBackStack()
+                },
+                restoreEpisodeId = restoreEpisodeId.takeIf { it.isNotBlank() },
+                restoreEpisodeSeason = restoreEpisodeSeason.takeIf { it >= 0 },
+                restoreEpisodeFocusToken = restoreEpisodeFocusToken,
+                restoreHeroFocusToken = restoreHeroFocusToken,
+                onSearchPerson = { name, role, photo ->
+                    val returnedToSearch = navController.popBackStack(SEARCH_ROUTE, inclusive = false)
+                    if (!returnedToSearch) navController.navigate(SEARCH_ROUTE)
+                    navController.currentBackStackEntry?.savedStateHandle?.let { searchState ->
+                        searchState["aioplay_search_person_name"] = name
+                        searchState["aioplay_search_person_role"] = role
+                        searchState["aioplay_search_person_photo"] = photo.orEmpty()
+                        searchState["aioplay_search_person_tmdb_id"] = 0L
+                        searchState["aioplay_search_origin_type"] = preview.type
+                        searchState["aioplay_search_origin_id"] = preview.id
+                        searchState["aioplay_search_origin_title"] = preview.name
+                        searchState["aioplay_search_origin_poster"] = preview.poster.orEmpty()
+                        searchState["aioplay_search_origin_backdrop"] = preview.background.orEmpty()
+                        searchState["aioplay_search_origin_logo"] = preview.logo.orEmpty()
+                    }
+                }
+            )
+        }
+
+        composable(ACCOUNT_ROUTE) {
+            AioPlayAccountScreen(
+                user = state.user,
+                vodEnabled = state.capabilities?.vodEnabled == true,
+                onBack = {
+                    navController.previousBackStackEntry?.savedStateHandle?.let { homeState ->
+                        val token = homeState.get<Int>("aioplay_home_memory_restore_token") ?: 0
+                        homeState["aioplay_home_memory_restore_token"] = token + 1
+                    }
+                    navController.popBackStack()
+                },
+                onRefresh = viewModel::refreshCurrentCatalog,
+                onSignOut = viewModel::signOut
+            )
+        }
+
+        composable(
+            route = SERIES_ROUTE,
+            arguments = listOf(
+                navArgument("itemId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                navArgument("poster") { type = NavType.StringType; defaultValue = "" },
+                navArgument("backdrop") { type = NavType.StringType; defaultValue = "" },
+                navArgument("logo") { type = NavType.StringType; defaultValue = "" }
+            )
+        ) { entry ->
+            val series = AioPlayItem(
+                id = entry.arguments?.getString("itemId").orEmpty(),
+                type = "series",
+                name = entry.arguments?.getString("title").orEmpty(),
+                description = null,
+                poster = entry.arguments?.getString("poster")?.takeIf { it.isNotBlank() },
+                background = entry.arguments?.getString("backdrop")?.takeIf { it.isNotBlank() },
+                logo = entry.arguments?.getString("logo")?.takeIf { it.isNotBlank() }
+            )
+            AioPlaySeriesScreen(
+                series = series,
+                viewModel = viewModel,
+                onEpisode = { episode ->
+                    navController.navigate(loadingRoute(episode, "episode"))
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = LOADING_ROUTE,
+            arguments = listOf(
+                navArgument("itemId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                navArgument("poster") { type = NavType.StringType; defaultValue = "" },
+                navArgument("backdrop") { type = NavType.StringType; defaultValue = "" },
+                navArgument("logo") { type = NavType.StringType; defaultValue = "" },
+                navArgument("contentType") { type = NavType.StringType; defaultValue = "sport_event" },
+                navArgument("sessionId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("parentId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("parentName") { type = NavType.StringType; defaultValue = "" },
+                navArgument("season") { type = NavType.StringType; defaultValue = "" },
+                navArgument("episode") { type = NavType.StringType; defaultValue = "" },
+                navArgument("episodeTitle") { type = NavType.StringType; defaultValue = "" },
+                navArgument("resumePositionMs") { type = NavType.StringType; defaultValue = "" },
+                navArgument("resumeDurationMs") { type = NavType.StringType; defaultValue = "" }
+            )
+        ) { entry ->
+            val item = AioPlayItem(
+                id = entry.arguments?.getString("itemId").orEmpty(),
+                type = "tv",
+                name = entry.arguments?.getString("title").orEmpty(),
+                description = null,
+                poster = entry.arguments?.getString("poster")?.takeIf { it.isNotBlank() },
+                background = entry.arguments?.getString("backdrop")?.takeIf { it.isNotBlank() },
+                logo = entry.arguments?.getString("logo")?.takeIf { it.isNotBlank() },
+                parentId = entry.arguments?.getString("parentId")?.takeIf { it.isNotBlank() },
+                parentName = entry.arguments?.getString("parentName")?.takeIf { it.isNotBlank() },
+                season = entry.arguments?.getString("season")?.toIntOrNull(),
+                episode = entry.arguments?.getString("episode")?.toIntOrNull(),
+                episodeTitle = entry.arguments?.getString("episodeTitle")?.takeIf { it.isNotBlank() },
+                resumePositionMs = entry.arguments?.getString("resumePositionMs")?.toLongOrNull(),
+                resumeDurationMs = entry.arguments?.getString("resumeDurationMs")?.toLongOrNull()
+            )
+            val contentType = entry.arguments?.getString("contentType")
+                ?.takeIf { it.isNotBlank() }
+                ?: "sport_event"
+            val sessionId = entry.arguments?.getString("sessionId").orEmpty()
+
+            AioPlayPlaybackLoadingScreen(
+                item = item,
+                contentType = contentType,
+                sessionId = sessionId,
+                viewModel = viewModel,
+                onReady = { playback ->
+                    navController.navigate(playerRoute(item, contentType, playback)) {
+                        if (contentType == "movie" || contentType == "episode") {
+                            popUpTo(DETAIL_ROUTE) { inclusive = false }
+                        } else {
+                            popUpTo(HOME_ROUTE) { inclusive = false }
+                        }
+                    }
+                },
+                onBack = {
+                    if (sessionId.isNotBlank()) viewModel.finishPlayback(sessionId)
+                    if (contentType == "movie" || contentType == "episode") {
+                        navController.popBackStack()
+                    } else {
+                        runCatching { navController.getBackStackEntry(HOME_ROUTE) }
+                            .getOrNull()
+                            ?.savedStateHandle
+                            ?.let { homeState ->
+                                val token = homeState.get<Int>("aioplay_home_restore_focus_token") ?: 0
+                                val itemId = homeState
+                                    .get<String>("aioplay_home_last_opened_item_id")
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?: item.id
+                                homeState["aioplay_home_restore_item_id"] = itemId
+                                homeState["aioplay_home_restore_focus_token"] = token + 1
+                            }
+                        navController.popBackStack(HOME_ROUTE, inclusive = false)
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = PLAYER_ROUTE,
+            arguments = listOf(
+                navArgument("streamUrl") { type = NavType.StringType; defaultValue = "" },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                navArgument("headers") { type = NavType.StringType; defaultValue = "" },
+                navArgument("contentId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("contentType") { type = NavType.StringType; defaultValue = "tv" },
+                navArgument("contentName") { type = NavType.StringType; defaultValue = "" },
+                navArgument("poster") { type = NavType.StringType; defaultValue = "" },
+                navArgument("backdrop") { type = NavType.StringType; defaultValue = "" },
+                navArgument("logo") { type = NavType.StringType; defaultValue = "" },
+                navArgument("videoId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("season") { type = NavType.StringType; defaultValue = "" },
+                navArgument("episode") { type = NavType.StringType; defaultValue = "" },
+                navArgument("episodeTitle") { type = NavType.StringType; defaultValue = "" },
+                navArgument("aioplayResumePositionMs") { type = NavType.StringType; defaultValue = "" },
+                navArgument("aioplayResumeDurationMs") { type = NavType.StringType; defaultValue = "" },
+                navArgument("aioplaySessionId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("aioplayContentType") { type = NavType.StringType; defaultValue = "sport_event" }
+            )
+        ) { entry ->
+            val args = entry.arguments
+            val playbackScope = rememberCoroutineScope()
+            val sessionId = args?.getString("aioplaySessionId").orEmpty()
+            val fallbackContentType = args?.getString("aioplayContentType")
+                ?.takeIf { it.isNotBlank() }
+                ?: "sport_event"
+            val trackingContentId = args?.getString("contentId").orEmpty()
+            val videoId = args?.getString("videoId").orEmpty()
+            val contentName = args?.getString("contentName")?.takeIf { it.isNotBlank() }
+            val item = AioPlayItem(
+                id = if (fallbackContentType == "episode") videoId.ifBlank { trackingContentId } else trackingContentId,
+                type = if (fallbackContentType == "episode") "series" else "tv",
+                name = args?.getString("title").orEmpty(),
+                description = null,
+                poster = args?.getString("poster")?.takeIf { it.isNotBlank() },
+                background = args?.getString("backdrop")?.takeIf { it.isNotBlank() },
+                logo = args?.getString("logo")?.takeIf { it.isNotBlank() },
+                parentId = trackingContentId.takeIf { fallbackContentType == "episode" && it.isNotBlank() },
+                parentName = contentName.takeIf { fallbackContentType == "episode" },
+                season = args?.getString("season")?.toIntOrNull(),
+                episode = args?.getString("episode")?.toIntOrNull(),
+                episodeTitle = args?.getString("episodeTitle")?.takeIf { it.isNotBlank() },
+                resumePositionMs = args?.getString("aioplayResumePositionMs")?.toLongOrNull(),
+                resumeDurationMs = args?.getString("aioplayResumeDurationMs")?.toLongOrNull()
+            )
+
+            fun returnAfterVodPlayback() {
+                val detailEntry = navController.previousBackStackEntry
+                if (fallbackContentType == "episode") {
+                    detailEntry?.savedStateHandle?.let { detailState ->
+                        val token = detailState.get<Int>("aioplay_detail_restore_episode_focus_token") ?: 0
+                        detailState["aioplay_detail_restore_episode_id"] = item.id
+                        detailState["aioplay_detail_restore_episode_season"] = item.season ?: -1
+                        detailState["aioplay_detail_restore_episode_focus_token"] = token + 1
+                    }
+                } else if (fallbackContentType == "movie") {
+                    detailEntry?.savedStateHandle?.let { detailState ->
+                        val token = detailState.get<Int>("aioplay_detail_restore_hero_focus_token") ?: 0
+                        detailState["aioplay_detail_restore_hero_focus_token"] = token + 1
+                    }
+                }
+                navController.popBackStack()
+            }
+
+            fun restoreHomeContentFocus() {
+                runCatching { navController.getBackStackEntry(HOME_ROUTE) }
+                    .getOrNull()
+                    ?.savedStateHandle
+                    ?.let { homeState ->
+                        val itemId = homeState
+                            .get<String>("aioplay_home_last_opened_item_id")
+                            ?.takeIf { it.isNotBlank() }
+                            ?: item.id
+                        val token = homeState.get<Int>("aioplay_home_restore_focus_token") ?: 0
+                        homeState["aioplay_home_restore_item_id"] = itemId
+                        homeState["aioplay_home_restore_focus_token"] = token + 1
+                    }
+            }
+
+            fun leavePlayer() {
+                if (fallbackContentType == "movie" || fallbackContentType == "episode") {
+                    returnAfterVodPlayback()
+                } else {
+                    restoreHomeContentFocus()
+                    navController.popBackStack(HOME_ROUTE, inclusive = false)
+                }
+            }
+
+            LaunchedEffect(sessionId) {
+                if (sessionId.isBlank()) return@LaunchedEffect
+                while (true) {
+                    delay(30_000)
+                    val heartbeat = viewModel.heartbeatPlayback(sessionId)
+                    if (heartbeat.isFailure) {
+                        viewModel.finishPlayback(sessionId)
+                        leavePlayer()
+                        break
+                    }
+                }
+            }
+
+            PlayerScreen(
+                onBackPress = { _, _, _, _, playbackCompleted ->
+                    if (playbackCompleted && (fallbackContentType == "movie" || fallbackContentType == "episode")) {
+                        viewModel.setWatched(item, true)
+                    }
+                    if (sessionId.isNotBlank()) viewModel.finishPlayback(sessionId)
+                    leavePlayer()
+                },
+                onPlaybackErrorBack = {
+                    if (sessionId.isBlank()) {
+                        leavePlayer()
+                    } else {
+                        navController.navigate(
+                            loadingRoute(
+                                item = item,
+                                contentType = fallbackContentType,
+                                sessionId = sessionId
+                            )
+                        ) {
+                            if (fallbackContentType == "movie" || fallbackContentType == "episode") {
+                                popUpTo(DETAIL_ROUTE) { inclusive = false }
+                            } else {
+                                popUpTo(HOME_ROUTE) { inclusive = false }
+                            }
+                        }
+                    }
+                },
+                onRequestAlternateSource = if (sessionId.isNotBlank()) {
+                    {
+                        navController.navigate(
+                            loadingRoute(
+                                item = item,
+                                contentType = fallbackContentType,
+                                sessionId = sessionId
+                            )
+                        ) {
+                            if (fallbackContentType == "movie" || fallbackContentType == "episode") {
+                                popUpTo(DETAIL_ROUTE) { inclusive = false }
+                            } else {
+                                popUpTo(HOME_ROUTE) { inclusive = false }
+                            }
+                        }
+                    }
+                } else {
+                    null
+                },
+                onPlaybackEnded = { nextVideoId, nextSeason, nextEpisode, exitReason ->
+                    // PlayerScreen owns completion detection, skip handling and the
+                    // post-play lifecycle. AIOPlay only mirrors the completed state
+                    // to the shared account and resolves the next AIOPlay episode.
+                    if (exitReason == null && (fallbackContentType == "movie" || fallbackContentType == "episode")) {
+                        viewModel.setWatched(item, true)
+                    }
+
+                    if (fallbackContentType != "episode" || exitReason != null) {
+                        if (sessionId.isNotBlank()) viewModel.finishPlayback(sessionId)
+                        leavePlayer()
+                    } else {
+                        playbackScope.launch {
+                            if (sessionId.isNotBlank()) {
+                                viewModel.finishPlaybackAndWait(sessionId)
+                            }
+                            // Upstream Nuvio can provide its resolved successor. When
+                            // AIOPlay metadata is not in Nuvio's addon repository it
+                            // legitimately cannot, so resolve from the same AIOPlay
+                            // series metadata as a fallback instead of treating null
+                            // as the end of the series.
+                            val nextItem = viewModel.resolveNextEpisode(
+                                current = item,
+                                nextVideoId = nextVideoId,
+                                nextSeason = nextSeason,
+                                nextEpisode = nextEpisode
+                            )
+                            if (nextItem == null) {
+                                leavePlayer()
+                            } else {
+                                navController.navigate(
+                                    loadingRoute(nextItem, "episode")
+                                ) {
+                                    popUpTo(DETAIL_ROUTE) { inclusive = false }
+                                }
+                            }
+                        }
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun AioPlaySearchScreen(
+    viewModel: AioPlayViewModel,
+    restoreResultId: String?,
+    restoreResultToken: Int,
+    initialPersonName: String,
+    initialPersonRole: String,
+    initialPersonPhoto: String,
+    initialPersonTmdbId: Long,
+    onClearPerson: () -> Unit,
+    onPersonContextConsumed: () -> Unit,
+    onResult: (AioPlayItem) -> Unit,
+    onSection: (AioPlaySection) -> Unit,
+    onSettings: () -> Unit,
+    onBack: () -> Unit
+) {
+    BackHandler(onBack = onBack)
+
+    var query by rememberSaveable { mutableStateOf("") }
+    var selectedType by rememberSaveable { mutableStateOf("all") }
+    var personName by rememberSaveable { mutableStateOf(initialPersonName) }
+    var personRole by rememberSaveable { mutableStateOf(initialPersonRole) }
+    var personPhoto by rememberSaveable { mutableStateOf(initialPersonPhoto) }
+    var personCreditFilter by rememberSaveable { mutableStateOf("all") }
+    var results by remember { mutableStateOf<List<AioPlayItem>>(emptyList()) }
+    var filmography by remember { mutableStateOf<List<AioPlayItem>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var windowStartRow by rememberSaveable { mutableStateOf(0) }
+    var pendingFocusId by remember { mutableStateOf<String?>(null) }
+    var pendingHeroItem by remember { mutableStateOf<AioPlayItem?>(null) }
+    var heroItem by remember { mutableStateOf<AioPlayItem?>(null) }
+
+    val queryFocus = remember { FocusRequester() }
+    val resultFocusRequesters = remember(results.map { it.type + "|" + it.id }) {
+        results.associate { item ->
+            (item.type + "|" + item.id) to FocusRequester()
+        }
+    }
+
+    LaunchedEffect(initialPersonName, initialPersonRole, initialPersonPhoto) {
+        if (initialPersonName.isNotBlank()) {
+            personName = initialPersonName
+            personRole = initialPersonRole
+            personPhoto = initialPersonPhoto
+            query = initialPersonName
+            selectedType = "all"
+            personCreditFilter = when {
+                initialPersonRole.contains("director", ignoreCase = true) -> "directing"
+                initialPersonRole.contains("writer", ignoreCase = true) || initialPersonRole.contains("creator", ignoreCase = true) -> "writing"
+                initialPersonRole.contains("cast", ignoreCase = true) || initialPersonRole.contains("actor", ignoreCase = true) -> "acting"
+                else -> "all"
+            }
+            onPersonContextConsumed()
+        }
+    }
+
+    LaunchedEffect(restoreResultToken) {
+        if (restoreResultToken <= 0) {
+            delay(120)
+            runCatching { queryFocus.requestFocus() }
+        }
+    }
+
+    LaunchedEffect(initialPersonTmdbId, personName) {
+        if (personName.isNotBlank()) {
+            viewModel.personCredits(initialPersonTmdbId, personName).onSuccess { filmography = it }
+        } else {
+            filmography = emptyList()
+        }
+    }
+
+    LaunchedEffect(query, selectedType, personName) {
+        val clean = (personName.takeIf { it.isNotBlank() } ?: query).trim()
+        if (clean.length < 2) {
+            loading = false
+            error = null
+            results = emptyList()
+            heroItem = null
+            pendingHeroItem = null
+            windowStartRow = 0
+            return@LaunchedEffect
+        }
+
+        loading = true
+        error = null
+        results = emptyList()
+        heroItem = null
+        pendingHeroItem = null
+        delay(320)
+        val type = if (personName.isNotBlank()) null else selectedType.takeIf { it == "movie" || it == "series" }
+        viewModel.searchVod(clean, type, peopleOnly = personName.isNotBlank())
+            .onSuccess { rows ->
+                results = if (personName.isNotBlank() && filmography.isNotEmpty()) {
+                    filmography
+                } else if (personName.isBlank() && selectedType == "anime") {
+                    rows.filter { item ->
+                        item.genres.any { genre -> genre.equals("anime", ignoreCase = true) } ||
+                            item.type.equals("anime", ignoreCase = true)
+                    }
+                } else {
+                    rows
+                }
+                windowStartRow = 0
+                pendingHeroItem = results.firstOrNull()
+            }
+            .onFailure { throwable ->
+                results = emptyList()
+                pendingHeroItem = null
+                heroItem = null
+                error = throwable.message ?: "Search is unavailable right now."
+            }
+        loading = false
+    }
+
+    LaunchedEffect(pendingHeroItem?.id, pendingHeroItem?.type) {
+        val target = pendingHeroItem ?: return@LaunchedEffect
+        delay(140)
+        if (
+            pendingHeroItem?.id == target.id &&
+            pendingHeroItem?.type == target.type
+        ) {
+            heroItem = target
+        }
+    }
+
+    LaunchedEffect(heroItem?.id, heroItem?.type) {
+        val target = heroItem ?: return@LaunchedEffect
+        delay(260)
+        if (heroItem?.id == target.id && heroItem?.type == target.type) {
+            viewModel.prefetchVodMeta(target)
+        }
+    }
+
+    LaunchedEffect(
+        restoreResultToken,
+        restoreResultId,
+        results.map { it.id }
+    ) {
+        if (restoreResultToken <= 0 || restoreResultId.isNullOrBlank()) {
+            return@LaunchedEffect
+        }
+        val targetIndex = results.indexOfFirst { it.id == restoreResultId }
+        if (targetIndex < 0) return@LaunchedEffect
+
+        val columns = 6
+        val totalRows = (results.size + columns - 1) / columns
+        val targetRow = targetIndex / columns
+        val maxStart = (totalRows - 2).coerceAtLeast(0)
+        windowStartRow = when {
+            targetRow < windowStartRow -> targetRow
+            targetRow > windowStartRow + 1 -> targetRow - 1
+            else -> windowStartRow
+        }.coerceIn(0, maxStart)
+        pendingFocusId = results[targetIndex].id
+    }
+
+    LaunchedEffect(windowStartRow, pendingFocusId, results) {
+        val targetId = pendingFocusId ?: return@LaunchedEffect
+        val item = results.firstOrNull { it.id == targetId } ?: return@LaunchedEffect
+        runCatching {
+            resultFocusRequesters[item.type + "|" + item.id]?.requestFocus()
+        }
+        pendingFocusId = null
+    }
+
+    val heroArtwork = heroItem?.background ?: heroItem?.poster
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AioPlayBackgroundGradient)
+    ) {
+        Crossfade(
+            targetState = heroArtwork,
+            animationSpec = tween(durationMillis = 280),
+            label = "AIOPlay search hero"
+        ) { artwork ->
+            if (!artwork.isNullOrBlank()) {
+                AsyncImage(
+                    model = artwork,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AioPlayContentDim)
+                .background(AioPlayHeroSideGradient)
+                .background(AioPlayHeroBottomGradient)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 38.dp, vertical = 22.dp)
+        ) {
+            AioPlaySharedTopBar(
+                selected = AioPlaySection.VOD,
+                onSection = onSection,
+                onSearch = { runCatching { queryFocus.requestFocus() } },
+                onSettings = onSettings,
+                searchSelected = true
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = if (personName.isNotBlank()) "People" else "Search",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = NuvioTheme.colors.TextPrimary,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                InputField(
+                    value = query,
+                    onValueChange = { value ->
+                        query = value
+                        if (personName.isNotBlank() && value.trim() != personName) {
+                            personName = ""
+                            personRole = ""
+                            personPhoto = ""
+                        }
+                    },
+                    placeholder = if (personName.isNotBlank()) "Titles featuring $personName" else "Search all titles",
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Done,
+                    startEditing = restoreResultToken <= 0,
+                    modifier = Modifier
+                        .width(430.dp)
+                        .focusRequester(queryFocus)
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                if (personName.isBlank()) Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AioPlaySectionCard(
+                            text = "All",
+                            selected = selectedType == "all",
+                            onClick = { selectedType = "all" },
+                            modifier = Modifier.width(112.dp)
+                        )
+                        AioPlaySectionCard(
+                            text = "Series",
+                            selected = selectedType == "series",
+                            onClick = { selectedType = "series" },
+                            modifier = Modifier.width(112.dp)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AioPlaySectionCard(
+                            text = "Anime",
+                            selected = selectedType == "anime",
+                            onClick = { selectedType = "anime" },
+                            modifier = Modifier.width(112.dp)
+                        )
+                        AioPlaySectionCard(
+                            text = "Movies",
+                            selected = selectedType == "movie",
+                            onClick = { selectedType = "movie" },
+                            modifier = Modifier.width(112.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (personName.isNotBlank()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (personPhoto.isNotBlank()) {
+                        AsyncImage(model = personPhoto, contentDescription = personName,
+                            modifier = Modifier.width(46.dp).height(62.dp).clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(personName, color = NuvioTheme.colors.TextPrimary, fontWeight = FontWeight.SemiBold)
+                        if (personRole.isNotBlank()) Text(personRole, style = MaterialTheme.typography.bodySmall, color = NuvioTheme.colors.TextSecondary)
+                    }
+                    AioPlaySectionCard(text = "Clear person", selected = false, onClick = {
+                        personName = ""; personRole = ""; personPhoto = ""; personCreditFilter = "all"; query = ""
+                        onClearPerson()
+                        runCatching { queryFocus.requestFocus() }
+                    }, modifier = Modifier.width(132.dp))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val role = personRole.lowercase()
+                    val supported = buildList {
+                        add("all" to "All credits")
+                        if ("cast" in role || "actor" in role || "acting" in role) add("acting" to "Acting")
+                        if ("director" in role) add("directing" to "Directing")
+                        if ("writer" in role || "creator" in role) add("writing" to "Writing")
+                    }
+                    supported.forEach { (key, label) ->
+                        AioPlaySectionCard(
+                            text = label,
+                            selected = personCreditFilter == key,
+                            onClick = { personCreditFilter = key },
+                            modifier = Modifier.width(112.dp)
+                        )
+                    }
+                }
+            }
+
+            AioPlayFocusedHeroInfo(
+                item = heroItem ?: results.firstOrNull(),
+                section = AioPlaySection.VOD
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(24.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val statusText = when {
+                    query.trim().length < 2 -> "Type at least two characters"
+                    loading && results.isEmpty() -> "Searching…"
+                    error != null -> error.orEmpty()
+                    results.isEmpty() -> if (personName.isNotBlank()) "No titles found in People Search" else "No matching titles"
+                    else -> results.size.toString() + if (personName.isNotBlank()) " People Search results" else " results"
+                }
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp
+                    ),
+                    color = if (error != null) {
+                        NuvioTheme.colors.Error
+                    } else {
+                        NuvioTheme.colors.TextSecondary
+                    }
+                )
+                if (loading && results.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .width(12.dp)
+                            .height(12.dp),
+                        strokeWidth = 1.5.dp,
+                        color = AioPlayAccentCyan
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            if (results.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (query.trim().length < 2) {
+                        Text(
+                            text = "Search is global and is not limited to your current catalogs.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = NuvioTheme.colors.TextSecondary
+                        )
+                    } else if (loading) {
+                        AioPlaySearchSkeleton()
+                    }
+                }
+            } else {
+                val columns = 6
+                val totalRows = (results.size + columns - 1) / columns
+                val maxStart = (totalRows - 2).coerceAtLeast(0)
+                if (windowStartRow > maxStart) {
+                    windowStartRow = maxStart
+                }
+
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val rowSpacing = 6.dp
+                    val columnSpacing = 9.dp
+                    val rowHeight = (maxHeight - rowSpacing) / 2
+                    val cardWidth = (maxWidth - (columnSpacing * (columns - 1))) / columns
+                    val posterHeight = cardWidth * 1.5f
+                    // Keep two complete 2:3 poster rows inside the search viewport.
+                    val fittedPosterHeight = minOf(posterHeight, (rowHeight - 24.dp).coerceAtLeast(48.dp))
+                    val fittedPosterWidth = fittedPosterHeight * (2f / 3f)
+
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(rowSpacing)
+                    ) {
+                        repeat(2) { visibleRow ->
+                            val absoluteRow = windowStartRow + visibleRow
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(rowHeight),
+                                horizontalArrangement = Arrangement.spacedBy(columnSpacing),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                repeat(columns) { column ->
+                                    val itemIndex = absoluteRow * columns + column
+                                    val item = results.getOrNull(itemIndex)
+
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(fittedPosterHeight + 24.dp),
+                                        contentAlignment = Alignment.TopCenter
+                                    ) {
+                                        if (item != null) {
+                                            val requester =
+                                                resultFocusRequesters[item.type + "|" + item.id]
+                                            Box(Modifier.width(fittedPosterWidth)) {
+                                            AioPlayContentCard(
+                                                item = item,
+                                                section = AioPlaySection.VOD,
+                                                posterMode = true,
+                                                posterCardHeight = fittedPosterHeight,
+                                                onClick = { onResult(item) },
+                                                modifier = Modifier
+                                                    .width(fittedPosterWidth)
+                                                    .then(
+                                                        if (requester != null) {
+                                                            Modifier.focusRequester(requester)
+                                                        } else {
+                                                            Modifier
+                                                        }
+                                                    )
+                                                    .onPreviewKeyEvent { event ->
+                                                        val native = event.nativeKeyEvent
+                                                        if (
+                                                            native.action !=
+                                                            AndroidKeyEvent.ACTION_DOWN
+                                                        ) {
+                                                            return@onPreviewKeyEvent false
+                                                        }
+
+                                                        val direction = when (native.keyCode) {
+                                                            AndroidKeyEvent.KEYCODE_DPAD_DOWN -> 1
+                                                            AndroidKeyEvent.KEYCODE_DPAD_UP -> -1
+                                                            else -> 0
+                                                        }
+                                                        if (direction == 0) {
+                                                            return@onPreviewKeyEvent false
+                                                        }
+
+                                                        val targetRow = absoluteRow + direction
+                                                        if (
+                                                            targetRow < 0 ||
+                                                            targetRow >= totalRows
+                                                        ) {
+                                                            return@onPreviewKeyEvent false
+                                                        }
+
+                                                        val targetRowStart = targetRow * columns
+                                                        val targetIndex = minOf(
+                                                            targetRowStart + column,
+                                                            results.lastIndex
+                                                        )
+                                                        if (targetIndex < targetRowStart) {
+                                                            return@onPreviewKeyEvent false
+                                                        }
+
+                                                        val targetItem = results[targetIndex]
+                                                        windowStartRow = when {
+                                                            targetRow < windowStartRow ->
+                                                                targetRow
+                                                            targetRow > windowStartRow + 1 ->
+                                                                targetRow - 1
+                                                            else ->
+                                                                windowStartRow
+                                                        }.coerceIn(0, maxStart)
+                                                        pendingFocusId = targetItem.id
+                                                        true
+                                                    }
+                                                    .onFocusChanged {
+                                                        if (it.isFocused) {
+                                                            pendingHeroItem = item
+                                                        }
+                                                    }
+                                            )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayHomeScreen(
+    state: AioPlayUiState,
+    restoreContentItemId: String?,
+    restoreContentFocusToken: Int,
+    restoreUniversalZone: String?,
+    restoreUniversalKey: String?,
+    restoreUniversalWindowStart: Int,
+    restoreUniversalFocusToken: Int,
+    onSection: (AioPlaySection) -> Unit,
+    onCatalog: (AioPlayCatalog) -> Unit,
+    onCollectionFolder: (AioPlayCollectionFolder) -> Unit,
+    onCollectionBack: () -> Unit,
+    onItem: (AioPlayItem) -> Unit,
+    onToggleLibrary: (AioPlayItem) -> Unit,
+    isInLibrary: (AioPlayItem) -> Boolean,
+    onToggleWatched: (AioPlayItem) -> Unit,
+    isWatched: (AioPlayItem) -> Boolean,
+    onPrefetch: (AioPlayItem) -> Unit,
+    onSearch: (AioPlayHomeFocusMemory) -> Unit,
+    onSettings: (AioPlayHomeFocusMemory) -> Unit,
+    onAccount: (AioPlayHomeFocusMemory) -> Unit
+) {
+    if (state.selectedSection == AioPlaySection.COLLECTIONS) {
+        AioPlayCollectionsScreen(
+            state = state,
+            onSection = onSection,
+            onFolder = onCollectionFolder,
+            onBackFolder = onCollectionBack,
+            onItem = onItem,
+            onSearch = { onSearch(AioPlayHomeFocusMemory(AioPlayHomeFocusZone.TOP, "collections", 0)) },
+            onSettings = { onSettings(AioPlayHomeFocusMemory(AioPlayHomeFocusZone.TOP, "collections", 0)) }
+        )
+        return
+    }
+    if (state.selectedSection == AioPlaySection.CONTINUE || state.selectedSection == AioPlaySection.LIBRARY) {
+        AioPlayFullWidthLibraryScreen(
+            state = state,
+            onSection = onSection,
+            onItem = onItem,
+            onSearch = { onSearch(AioPlayHomeFocusMemory(AioPlayHomeFocusZone.TOP, state.selectedSection.name.lowercase(), 0)) },
+            onSettings = { onSettings(AioPlayHomeFocusMemory(AioPlayHomeFocusZone.TOP, state.selectedSection.name.lowercase(), 0)) },
+            isInLibrary = isInLibrary,
+            isWatched = isWatched
+        )
+        return
+    }
+
+    val liveFocus = remember { FocusRequester() }
+    val vodFocus = remember { FocusRequester() }
+    val collectionsFocus = remember { FocusRequester() }
+    val continueFocus = remember { FocusRequester() }
+    val libraryFocus = remember { FocusRequester() }
+    val searchFocus = remember { FocusRequester() }
+    val settingsFocus = remember { FocusRequester() }
+    val accountFocus = remember { FocusRequester() }
+    val firstContentFocus = remember(state.selectedSection, state.items.firstOrNull()?.id) { FocusRequester() }
+    val contentFocusRequesters = remember(
+        state.selectedSection,
+        state.selectedCatalogId,
+        state.items.map { it.id },
+        firstContentFocus
+    ) {
+        state.items.associate { item ->
+            item.id to if (item.id == state.items.firstOrNull()?.id) {
+                firstContentFocus
+            } else {
+                FocusRequester()
+            }
+        }
+    }
+    var contentWindowStartRow by remember(
+        state.selectedSection,
+        state.selectedCatalogId
+    ) { mutableIntStateOf(0) }
+    var pendingContentFocusId by remember(
+        state.selectedSection,
+        state.selectedCatalogId
+    ) { mutableStateOf<String?>(null) }
+    var pendingSectionFocus by remember { mutableStateOf<AioPlaySection?>(null) }
+    val navFocusRequesters = remember(state.catalogs.map { it.selectionKey }) {
+        state.catalogs.associate { it.selectionKey to FocusRequester() }
+    }
+    var focusZone by remember { mutableStateOf(AioPlayHomeFocusZone.TOP) }
+    var focusedTopKey by remember { mutableStateOf<String?>(null) }
+    var focusedNavKey by remember { mutableStateOf<String?>(null) }
+    var focusedContentId by remember { mutableStateOf<String?>(null) }
+    var rapidNavigation by remember { mutableStateOf(false) }
+    var contextItem by remember { mutableStateOf<AioPlayItem?>(null) }
+    var suppressSelectReleaseForItemId by remember { mutableStateOf<String?>(null) }
+    val contextFirstFocus = remember { FocusRequester() }
+    var rapidNavigationEpoch by remember { mutableIntStateOf(0) }
+
+    var pendingHeroItem by remember(
+        state.selectedSection,
+        state.selectedCatalogId
+    ) { mutableStateOf<AioPlayItem?>(null) }
+    var heroItem by remember(
+        state.selectedSection,
+        state.selectedCatalogId
+    ) { mutableStateOf<AioPlayItem?>(null) }
+
+    fun selectedTopRequester(): FocusRequester = when (state.selectedSection) {
+        AioPlaySection.LIVE -> liveFocus
+        AioPlaySection.VOD -> vodFocus
+        AioPlaySection.COLLECTIONS -> collectionsFocus
+        AioPlaySection.CONTINUE -> continueFocus
+        AioPlaySection.LIBRARY -> libraryFocus
+    }
+
+    fun focusFirstNavItem() {
+        val first = state.catalogs.firstOrNull() ?: return
+        runCatching { navFocusRequesters[first.selectionKey]?.requestFocus() }
+    }
+
+    fun focusSelectedNavItem() {
+        val selected = state.catalogs.firstOrNull {
+            it.selectionKey == state.selectedCatalogId
+        } ?: state.catalogs.firstOrNull() ?: return
+        runCatching { navFocusRequesters[selected.selectionKey]?.requestFocus() }
+    }
+
+    fun focusMemory(): AioPlayHomeFocusMemory = AioPlayHomeFocusMemory(
+        zone = focusZone,
+        key = when (focusZone) {
+            AioPlayHomeFocusZone.TOP -> focusedTopKey
+            AioPlayHomeFocusZone.NAV -> focusedNavKey
+            AioPlayHomeFocusZone.CONTENT -> focusedContentId
+        },
+        windowStartRow = contentWindowStartRow
+    )
+
+    fun noteRapidNavigation(native: android.view.KeyEvent) {
+        if (
+            native.repeatCount > 0 &&
+            native.keyCode in setOf(
+                AndroidKeyEvent.KEYCODE_DPAD_LEFT,
+                AndroidKeyEvent.KEYCODE_DPAD_RIGHT,
+                AndroidKeyEvent.KEYCODE_DPAD_UP,
+                AndroidKeyEvent.KEYCODE_DPAD_DOWN
+            )
+        ) {
+            rapidNavigation = true
+            rapidNavigationEpoch++
+        }
+    }
+
+    LaunchedEffect(rapidNavigationEpoch) {
+        if (rapidNavigationEpoch <= 0) return@LaunchedEffect
+        delay(220)
+        rapidNavigation = false
+    }
+
+    LaunchedEffect(
+        pendingSectionFocus,
+        state.selectedSection,
+        state.catalogs,
+        state.items
+    ) {
+        val requested = pendingSectionFocus ?: return@LaunchedEffect
+        if (requested != state.selectedSection) return@LaunchedEffect
+
+        when (requested) {
+            AioPlaySection.CONTINUE,
+            AioPlaySection.LIBRARY,
+            AioPlaySection.COLLECTIONS -> {
+                if (state.items.isNotEmpty()) {
+                    runCatching { firstContentFocus.requestFocus() }
+                    pendingSectionFocus = null
+                }
+            }
+            AioPlaySection.LIVE,
+            AioPlaySection.VOD -> {
+                if (state.catalogs.isNotEmpty()) {
+                    focusFirstNavItem()
+                    pendingSectionFocus = null
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(
+        restoreContentFocusToken,
+        restoreContentItemId,
+        state.selectedSection,
+        state.selectedCatalogId,
+        state.items
+    ) {
+        if (restoreContentFocusToken <= 0 || restoreContentItemId.isNullOrBlank()) {
+            return@LaunchedEffect
+        }
+        val targetIndex = state.items.indexOfFirst { it.id == restoreContentItemId }
+        if (targetIndex < 0) return@LaunchedEffect
+
+        val columnCount = if (state.selectedSection == AioPlaySection.LIVE) 3 else 6
+        val totalRows = (state.items.size + columnCount - 1) / columnCount
+        val targetRow = targetIndex / columnCount
+        val maxWindowStart = (totalRows - 2).coerceAtLeast(0)
+
+        contentWindowStartRow = when {
+            targetRow < contentWindowStartRow -> targetRow
+            targetRow > contentWindowStartRow + 1 -> targetRow - 1
+            else -> contentWindowStartRow
+        }.coerceIn(0, maxWindowStart)
+        pendingContentFocusId = restoreContentItemId
+    }
+
+    LaunchedEffect(
+        restoreUniversalFocusToken,
+        restoreUniversalZone,
+        restoreUniversalKey,
+        restoreUniversalWindowStart,
+        state.selectedSection,
+        state.selectedCatalogId,
+        state.catalogs,
+        state.items
+    ) {
+        if (restoreUniversalFocusToken <= 0 || restoreUniversalZone.isNullOrBlank()) {
+            return@LaunchedEffect
+        }
+        val zone = runCatching {
+            AioPlayHomeFocusZone.valueOf(restoreUniversalZone)
+        }.getOrNull() ?: return@LaunchedEffect
+
+        when (zone) {
+            AioPlayHomeFocusZone.TOP -> {
+                val requester = when (restoreUniversalKey) {
+                    "search" -> searchFocus
+                    "settings" -> settingsFocus
+                    "live" -> liveFocus
+                    "vod" -> vodFocus
+                    "collections" -> collectionsFocus
+                    "continue" -> continueFocus
+                    "library" -> libraryFocus
+                    else -> selectedTopRequester()
+                }
+                runCatching { requester.requestFocus() }
+            }
+            AioPlayHomeFocusZone.NAV -> {
+                if (restoreUniversalKey == "account") {
+                    runCatching { accountFocus.requestFocus() }
+                } else {
+                    val requester = restoreUniversalKey
+                        ?.let { navFocusRequesters[it] }
+                        ?: state.selectedCatalogId?.let { navFocusRequesters[it] }
+                    runCatching { requester?.requestFocus() }
+                }
+            }
+            AioPlayHomeFocusZone.CONTENT -> {
+                val targetId = restoreUniversalKey ?: return@LaunchedEffect
+                val targetIndex = state.items.indexOfFirst { it.id == targetId }
+                if (targetIndex < 0) return@LaunchedEffect
+                val columns = if (state.selectedSection == AioPlaySection.LIVE) 3 else 6
+                val totalRows = (state.items.size + columns - 1) / columns
+                val maxStart = (totalRows - 2).coerceAtLeast(0)
+                contentWindowStartRow = restoreUniversalWindowStart.coerceIn(0, maxStart)
+                pendingContentFocusId = targetId
+            }
+        }
+    }
+
+    LaunchedEffect(
+        state.selectedSection,
+        state.selectedCatalogId,
+        state.items.firstOrNull()?.id
+    ) {
+        if (state.items.isEmpty()) {
+            heroItem = null
+            pendingHeroItem = null
+            return@LaunchedEffect
+        }
+        if (heroItem?.id !in state.items.map { it.id }) {
+            pendingHeroItem = state.items.first()
+        }
+    }
+
+    // Do not swap the whole background while somebody is racing across a row.
+    // The short dwell makes remote navigation feel composed rather than flashy.
+    LaunchedEffect(pendingHeroItem?.id, rapidNavigation) {
+        val target = pendingHeroItem ?: return@LaunchedEffect
+        delay(if (rapidNavigation) 360 else 160)
+        if (pendingHeroItem?.id == target.id) {
+            heroItem = target
+        }
+    }
+
+    LaunchedEffect(pendingHeroItem?.id, rapidNavigation, state.selectedSection) {
+        val target = pendingHeroItem ?: return@LaunchedEffect
+        if (state.selectedSection == AioPlaySection.LIVE) return@LaunchedEffect
+        delay(if (rapidNavigation) 520 else 360)
+        if (pendingHeroItem?.id != target.id || rapidNavigation) return@LaunchedEffect
+
+        onPrefetch(target)
+        val index = state.items.indexOfFirst { it.id == target.id }
+        state.items.getOrNull(index - 1)?.let(onPrefetch)
+        state.items.getOrNull(index + 1)?.let(onPrefetch)
+    }
+
+    BackHandler {
+        when (focusZone) {
+            AioPlayHomeFocusZone.TOP -> focusFirstNavItem()
+            AioPlayHomeFocusZone.NAV -> runCatching { selectedTopRequester().requestFocus() }
+            AioPlayHomeFocusZone.CONTENT -> focusSelectedNavItem()
+        }
+    }
+
+    val heroArtwork = heroItem?.background ?: heroItem?.poster
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AioPlayBackgroundGradient)
+    ) {
+        Crossfade(
+            targetState = heroArtwork,
+            animationSpec = tween(durationMillis = 300),
+            label = "AIOPlay hero artwork"
+        ) { artwork ->
+            if (!artwork.isNullOrBlank()) {
+                AsyncImage(
+                    model = artwork,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+        }
+
+        // Layered scrims keep artwork legible without turning it into a flat,
+        // uniformly dark wallpaper.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AioPlayContentDim)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AioPlayHeroSideGradient)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AioPlayHeroBottomGradient)
+        )
+
+        Row(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .width(190.dp)
+                    .fillMaxHeight()
+                    .padding(start = 22.dp, end = 12.dp, top = 22.dp, bottom = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.aioplay_brand),
+                        contentDescription = "AIOPlay",
+                        modifier = Modifier
+                            .width(25.dp)
+                            .aspectRatio(1f),
+                        contentScale = ContentScale.Fit
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "AIOPlay",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 8.sp,
+                            lineHeight = 10.sp
+                        ),
+                        color = NuvioTheme.colors.TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(bottom = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(state.catalogs, key = { it.selectionKey }) { catalog ->
+                        val requester = navFocusRequesters[catalog.selectionKey]
+                        AioPlayNavCard(
+                            text = catalog.name,
+                            selected = state.selectedCatalogId == catalog.selectionKey,
+                            onClick = { onCatalog(catalog) },
+                            modifier = Modifier
+                                .then(
+                                    if (requester != null) Modifier.focusRequester(requester)
+                                    else Modifier
+                                )
+                                .onFocusChanged {
+                                    if (it.isFocused) {
+                                        focusZone = AioPlayHomeFocusZone.NAV
+                                        focusedNavKey = catalog.selectionKey
+                                    }
+                                }
+                        )
+                    }
+                }
+
+                AioPlayNavCard(
+                    text = state.user?.displayName?.ifBlank { state.user.username } ?: "Account",
+                    selected = false,
+                    onClick = { onAccount(focusMemory()) },
+                    modifier = Modifier
+                        .focusRequester(accountFocus)
+                        .onFocusChanged {
+                            if (it.isFocused) {
+                                focusZone = AioPlayHomeFocusZone.NAV
+                                focusedNavKey = "account"
+                            }
+                        }
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(start = 24.dp, end = 38.dp, top = 22.dp, bottom = 18.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.055f))))
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (state.capabilities?.vodEnabled == true) {
+                            AioPlaySectionCard(
+                                text = "VOD",
+                                selected = state.selectedSection == AioPlaySection.VOD,
+                                onClick = {
+                                    pendingSectionFocus = AioPlaySection.VOD
+                                    onSection(AioPlaySection.VOD)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(vodFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "vod"
+                                        }
+                                    }
+                            )
+                        }
+                        if (state.capabilities?.sportsEnabled == true) {
+                            if (state.capabilities?.vodEnabled == true) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            AioPlaySectionCard(
+                                text = "Live",
+                                selected = state.selectedSection == AioPlaySection.LIVE,
+                                onClick = {
+                                    pendingSectionFocus = AioPlaySection.LIVE
+                                    onSection(AioPlaySection.LIVE)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(liveFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "live"
+                                        }
+                                    }
+                            )
+                        }
+                        if (state.capabilities?.vodEnabled == true) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AioPlaySectionCard(
+                                text = "Collections",
+                                selected = state.selectedSection == AioPlaySection.COLLECTIONS,
+                                onClick = {
+                                    pendingSectionFocus = AioPlaySection.COLLECTIONS
+                                    onSection(AioPlaySection.COLLECTIONS)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(collectionsFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "collections"
+                                        }
+                                    }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AioPlaySectionCard(
+                                text = "Search",
+                                selected = false,
+                                onClick = { onSearch(focusMemory()) },
+                                modifier = Modifier
+                                    .focusRequester(searchFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "search"
+                                        }
+                                    }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AioPlaySectionCard(
+                                text = "Continue Watching",
+                                selected = state.selectedSection == AioPlaySection.CONTINUE,
+                                onClick = {
+                                    pendingSectionFocus = AioPlaySection.CONTINUE
+                                    onSection(AioPlaySection.CONTINUE)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(continueFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "continue"
+                                        }
+                                    }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AioPlaySectionCard(
+                                text = "Library",
+                                selected = state.selectedSection == AioPlaySection.LIBRARY,
+                                onClick = {
+                                    pendingSectionFocus = AioPlaySection.LIBRARY
+                                    onSection(AioPlaySection.LIBRARY)
+                                },
+                                modifier = Modifier
+                                    .focusRequester(libraryFocus)
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            focusZone = AioPlayHomeFocusZone.TOP
+                                            focusedTopKey = "library"
+                                        }
+                                    }
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = { onSettings(focusMemory()) },
+                            modifier = Modifier
+                                .width(42.dp)
+                                .focusRequester(settingsFocus)
+                                .onFocusChanged {
+                                    if (it.isFocused) {
+                                        focusZone = AioPlayHomeFocusZone.TOP
+                                        focusedTopKey = "settings"
+                                    }
+                                },
+                            colors = ButtonDefaults.colors(
+                                containerColor = AioPlayPillIdle,
+                                focusedContainerColor = AioPlayPillSelected
+                            ),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Playback settings"
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(5.dp))
+
+                AioPlayFocusedHeroInfo(
+                    item = heroItem ?: state.items.firstOrNull(),
+                    section = state.selectedSection
+                )
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                val title = state.catalogs
+                    .firstOrNull { it.selectionKey == state.selectedCatalogId }
+                    ?.name
+                    ?: state.selectedSection.label
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 14.sp,
+                            lineHeight = 17.sp
+                        ),
+                        color = NuvioTheme.colors.TextPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (state.loadingCatalog && state.items.isNotEmpty()) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .width(13.dp)
+                                .height(13.dp),
+                            strokeWidth = 1.5.dp,
+                            color = AioPlayAccentCyan
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Updating",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp),
+                            color = NuvioTheme.colors.TextSecondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                LaunchedEffect(state.selectedSection, state.selectedCatalogId) {
+                    if (restoreContentFocusToken <= 0 || restoreContentItemId.isNullOrBlank()) {
+                        contentWindowStartRow = 0
+                        pendingContentFocusId = null
+                    }
+                }
+
+                LaunchedEffect(contentWindowStartRow, pendingContentFocusId) {
+                    val focusId = pendingContentFocusId ?: return@LaunchedEffect
+                    runCatching { contentFocusRequesters[focusId]?.requestFocus() }
+                    pendingContentFocusId = null
+                }
+
+                when {
+                    state.items.isEmpty() && state.loadingCatalog -> {
+                        AioPlayCatalogSkeleton(
+                            posterMode = state.selectedSection != AioPlaySection.LIVE
+                        )
+                    }
+                    state.items.isEmpty() -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = if (state.selectedSection == AioPlaySection.LIBRARY) "Your Library is empty" else (state.error ?: "Nothing is available in this section right now."),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = NuvioTheme.colors.TextPrimary
+                                )
+                                if (state.selectedSection == AioPlaySection.LIBRARY) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Open a movie or series and choose + Library to save it here.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = NuvioTheme.colors.TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    else -> {
+                        val posterMode = state.selectedSection != AioPlaySection.LIVE
+                        val columnCount = if (posterMode) 6 else 3
+                        val totalRows = (state.items.size + columnCount - 1) / columnCount
+                        val maxWindowStart = (totalRows - 2).coerceAtLeast(0)
+                        if (contentWindowStartRow > maxWindowStart) {
+                            contentWindowStartRow = maxWindowStart
+                        }
+
+                        BoxWithConstraints(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    alpha = if (state.loadingCatalog) 0.72f else 1f
+                                }
+                        ) {
+                            val rowSpacing = if (posterMode) 6.dp else 8.dp
+                            val columnSpacing = if (posterMode) 9.dp else 10.dp
+                            val rowHeight = (maxHeight - rowSpacing) / 2
+
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(rowSpacing)
+                            ) {
+                                repeat(2) { visibleRow ->
+                                    val absoluteRow = contentWindowStartRow + visibleRow
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(rowHeight),
+                                        horizontalArrangement = Arrangement.spacedBy(columnSpacing),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        repeat(columnCount) { column ->
+                                            val itemIndex = absoluteRow * columnCount + column
+                                            val item = state.items.getOrNull(itemIndex)
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .fillMaxHeight(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (item != null) {
+                                                    val requester = contentFocusRequesters[item.id]
+                                                    AioPlayContentCard(
+                                                        item = item,
+                                                        section = state.selectedSection,
+                                                        posterMode = posterMode,
+                                                        liveCardHeight = if (posterMode) null else rowHeight - 8.dp,
+                                                        onClick = { onItem(item) },
+                                                        inLibrary = isInLibrary(item),
+                                                        watched = isWatched(item),
+                                                        modifier = Modifier
+                                                            .then(
+                                                                if (requester != null) {
+                                                                    Modifier.focusRequester(requester)
+                                                                } else {
+                                                                    Modifier
+                                                                }
+                                                            )
+                                                            .onPreviewKeyEvent { event ->
+                                                                val native = event.nativeKeyEvent
+                                                                val isSelectKey = native.keyCode in setOf(
+                                                                    AndroidKeyEvent.KEYCODE_DPAD_CENTER,
+                                                                    AndroidKeyEvent.KEYCODE_ENTER
+                                                                )
+                                                                if (native.action == AndroidKeyEvent.ACTION_UP) {
+                                                                    if (
+                                                                        isSelectKey &&
+                                                                        suppressSelectReleaseForItemId == item.id
+                                                                    ) {
+                                                                        suppressSelectReleaseForItemId = null
+                                                                        return@onPreviewKeyEvent true
+                                                                    }
+                                                                    return@onPreviewKeyEvent false
+                                                                }
+                                                                if (native.action != AndroidKeyEvent.ACTION_DOWN) {
+                                                                    return@onPreviewKeyEvent false
+                                                                }
+                                                                noteRapidNavigation(native)
+                                                                if (
+                                                                    state.selectedSection != AioPlaySection.LIVE &&
+                                                                    native.repeatCount >= 1 &&
+                                                                    isSelectKey
+                                                                ) {
+                                                                    suppressSelectReleaseForItemId = item.id
+                                                                    contextItem = item
+                                                                    return@onPreviewKeyEvent true
+                                                                }
+
+                                                                val direction = when (native.keyCode) {
+                                                                    AndroidKeyEvent.KEYCODE_DPAD_DOWN -> 1
+                                                                    AndroidKeyEvent.KEYCODE_DPAD_UP -> -1
+                                                                    else -> 0
+                                                                }
+                                                                if (direction == 0) {
+                                                                    return@onPreviewKeyEvent false
+                                                                }
+
+                                                                val targetRow = absoluteRow + direction
+                                                                if (targetRow < 0 || targetRow >= totalRows) {
+                                                                    return@onPreviewKeyEvent false
+                                                                }
+
+                                                                val targetRowStart = targetRow * columnCount
+                                                                val targetIndex = minOf(
+                                                                    targetRowStart + column,
+                                                                    state.items.lastIndex
+                                                                )
+                                                                if (targetIndex < targetRowStart) {
+                                                                    return@onPreviewKeyEvent false
+                                                                }
+
+                                                                val targetItem = state.items[targetIndex]
+                                                                val nextWindowStart = when {
+                                                                    targetRow < contentWindowStartRow ->
+                                                                        targetRow
+                                                                    targetRow > contentWindowStartRow + 1 ->
+                                                                        targetRow - 1
+                                                                    else ->
+                                                                        contentWindowStartRow
+                                                                }.coerceIn(0, maxWindowStart)
+
+                                                                pendingContentFocusId = targetItem.id
+                                                                contentWindowStartRow = nextWindowStart
+                                                                true
+                                                            }
+                                                            .onFocusChanged {
+                                                                if (it.isFocused) {
+                                                                    focusZone = AioPlayHomeFocusZone.CONTENT
+                                                                    focusedContentId = item.id
+                                                                    pendingHeroItem = item
+                                                                }
+                                                            }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        contextItem?.let { item ->
+            BackHandler {
+                contextItem = null
+                pendingContentFocusId = item.id
+            }
+            LaunchedEffect(item.id) {
+                kotlinx.coroutines.delay(80)
+                runCatching { contextFirstFocus.requestFocus() }
+            }
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.62f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier.width(360.dp),
+                    shape = androidx.tv.material3.MaterialTheme.shapes.medium,
+                    colors = SurfaceDefaults.colors(containerColor = NuvioTheme.colors.BackgroundCard)
+                ) {
+                    Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(item.name, style = MaterialTheme.typography.titleLarge, color = NuvioTheme.colors.TextPrimary, maxLines = 2)
+                        Text("Title actions", style = MaterialTheme.typography.bodySmall, color = NuvioTheme.colors.TextSecondary)
+                        Button(onClick = { contextItem = null; onItem(item) }, modifier = Modifier.fillMaxWidth().focusRequester(contextFirstFocus)) { Text(if ((item.resumePositionMs ?: 0L) > 0L) "Resume / Details" else "Play / Details") }
+                        Button(onClick = { onToggleLibrary(item); contextItem = null; pendingContentFocusId = item.id }, modifier = Modifier.fillMaxWidth()) { Text(if (isInLibrary(item)) "Remove from Library" else "Add to Library") }
+                        Button(onClick = { onToggleWatched(item); contextItem = null; pendingContentFocusId = item.id }, modifier = Modifier.fillMaxWidth()) { Text(if (isWatched(item)) "Mark Unwatched" else "Mark Watched") }
+                        Button(
+                            onClick = {
+                                contextItem = null
+                                onSearch(
+                                    AioPlayHomeFocusMemory(
+                                        zone = AioPlayHomeFocusZone.CONTENT,
+                                        key = item.id,
+                                        windowStartRow = contentWindowStartRow
+                                    )
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Search") }
+                        Button(onClick = { contextItem = null; pendingContentFocusId = item.id }, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayFocusedHeroInfo(
+    item: AioPlayItem?,
+    section: AioPlaySection
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+.height(86.dp)
+    ) {
+        if (item == null) return@Box
+
+        val metadata = remember(
+            item.id,
+            item.releaseInfo,
+            item.imdbRating,
+            item.runtime,
+            item.genres,
+            item.season,
+            item.episode,
+            section
+        ) {
+            buildList {
+                if (section == AioPlaySection.LIVE) {
+                    add("LIVE")
+                } else if (
+                    section == AioPlaySection.CONTINUE &&
+                    item.season != null &&
+                    item.episode != null
+                ) {
+                    add(
+                        "S" + item.season.toString().padStart(2, '0') +
+                            "E" + item.episode.toString().padStart(2, '0')
+                    )
+                } else {
+                    item.releaseInfo?.takeIf { it.isNotBlank() }?.let(::add)
+                    item.imdbRating?.takeIf { it > 0.0 }?.let {
+                        add("★ " + String.format(java.util.Locale.US, "%.1f", it))
+                    }
+                    item.runtime?.takeIf { it.isNotBlank() }?.let(::add)
+                    item.genres.take(2).filter { it.isNotBlank() }.forEach(::add)
+                }
+            }.take(5)
+        }
+
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(205.dp)
+                    .height(44.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (!item.logo.isNullOrBlank()) {
+                    AsyncImage(
+                        model = item.logo,
+                        contentDescription = item.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 18.sp,
+                            lineHeight = 21.sp
+                        ),
+                        color = NuvioTheme.colors.TextPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                if (metadata.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        metadata.forEach { label ->
+                            AioPlayMetaChip(label)
+                        }
+                    }
+                }
+
+                val detail = when {
+                    section == AioPlaySection.CONTINUE && !item.description.isNullOrBlank() ->
+                        item.description
+                    section == AioPlaySection.CONTINUE && !item.episodeTitle.isNullOrBlank() ->
+                        item.episodeTitle
+                    else -> item.description
+                }
+                if (!detail.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = detail.lineSequence().firstOrNull().orEmpty(),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 10.sp,
+                            lineHeight = 12.sp
+                        ),
+                        color = Color.White.copy(alpha = 0.72f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayMetaChip(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.Black.copy(alpha = 0.34f))
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 16.sp,
+                lineHeight = 18.sp
+            ),
+            color = Color.White.copy(alpha = 0.84f),
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun AioPlaySectionCard(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    inLibrary: Boolean = false,
+    watched: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val shape = remember { RoundedCornerShape(18.dp) }
+    val innerShape = remember { RoundedCornerShape(16.dp) }
+    var isFocused by remember { mutableStateOf(false) }
+
+    Card(
+        onClick = onClick,
+        modifier = modifier
+            .width(if (text == "Continue Watching") 157.dp else 106.dp)
+            .onFocusChanged { isFocused = it.isFocused },
+        shape = CardDefaults.shape(shape = shape),
+        colors = CardDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent
+        ),
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(1.dp, Color.Transparent),
+                shape = shape
+            )
+        ),
+        scale = CardDefaults.scale(focusedScale = 1.035f)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    when {
+                        isFocused -> Modifier.background(Color.White.copy(alpha = 0.92f), shape)
+                        selected -> Modifier.background(AioPlayAccentGradient, shape)
+                        else -> Modifier.background(Color.White.copy(alpha = 0.08f), shape)
+                    }
+                )
+                .padding(
+                    when {
+                        isFocused -> 2.5.dp
+                        selected -> 1.5.dp
+                        else -> 1.dp
+                    }
+                )
+                .background(
+                    if (isFocused) Color.White.copy(alpha = 0.12f) else if (selected) Color.White.copy(alpha = 0.08f) else Color.Transparent,
+                    innerShape
+                )
+                .padding(vertical = 6.dp, horizontal = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp
+                ),
+                color = if (isFocused) Color(0xFF11161C) else Color.White,
+                fontWeight = if (selected || isFocused) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun AioPlayNavCard(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = remember { RoundedCornerShape(21.dp) }
+    val innerShape = remember { RoundedCornerShape(20.dp) }
+    var isFocused by remember { mutableStateOf(false) }
+
+    Card(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .onFocusChanged { isFocused = it.isFocused },
+        shape = CardDefaults.shape(shape = shape),
+        colors = CardDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent
+        ),
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(1.dp, Color.Transparent),
+                shape = shape
+            )
+        ),
+        scale = CardDefaults.scale(focusedScale = 1.03f)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        when {
+                            isFocused -> listOf(Color.White.copy(alpha = 0.34f), Color.White.copy(alpha = 0.16f))
+                            selected -> listOf(Color.White.copy(alpha = 0.22f), Color.White.copy(alpha = 0.09f))
+                            else -> listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.055f))
+                        }
+                    ),
+                    shape
+                )
+                .padding(
+                    when {
+                        isFocused -> 2.5.dp
+                        selected -> 1.5.dp
+                        else -> 1.dp
+                    }
+                )
+                .background(
+                    when {
+                        isFocused -> Color.White.copy(alpha = 0.10f)
+                        selected -> AioPlayPillSelected
+                        else -> Color.Transparent
+                    },
+                    innerShape
+                )
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp
+                ),
+                color = Color.White,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun AioPlayContentCard(
+    item: AioPlayItem,
+    section: AioPlaySection,
+    posterMode: Boolean,
+    liveCardHeight: Dp? = null,
+    posterCardHeight: Dp? = null,
+    onClick: () -> Unit,
+    inLibrary: Boolean = false,
+    watched: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    if (posterMode) {
+        val posterStyle = PosterCardDefaults.Style
+        val shape = remember(posterStyle.cornerRadius) {
+            RoundedCornerShape(posterStyle.cornerRadius)
+        }
+        val cardDepthStyle = LocalCardDepthStyle.current
+        var isFocused by remember { mutableStateOf(false) }
+        val progress = if (
+            item.resumeDurationMs != null &&
+            item.resumeDurationMs > 0L &&
+            item.resumePositionMs != null
+        ) {
+            (item.resumePositionMs.toFloat() / item.resumeDurationMs.toFloat())
+                .coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 3.dp, vertical = 4.dp)
+        ) {
+            Card(
+                onClick = onClick,
+                modifier = modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (posterCardHeight != null) {
+                            Modifier.height(posterCardHeight)
+                        } else {
+                            Modifier.aspectRatio(2f / 3f)
+                        }
+                    )
+                    .onFocusChanged { isFocused = it.isFocused },
+                shape = CardDefaults.shape(shape = shape),
+                colors = CardDefaults.colors(
+                    containerColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent
+                ),
+                border = CardDefaults.border(
+                    focusedBorder = Border(
+                        border = BorderStroke(2.5.dp, AioPlayAccentGradient),
+                        shape = shape
+                    )
+                ),
+                scale = CardDefaults.scale(focusedScale = 1.045f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(shape)
+                        .nuvioCardDepth(
+                            shape = shape,
+                            surface = CardDepthSurface.POSTERS,
+                            style = cardDepthStyle
+                        )
+                        .background(NuvioTheme.colors.BackgroundCard)
+                ) {
+                    val image = item.poster ?: item.background
+                    if (!image.isNullOrBlank()) {
+                        AsyncImage(
+                            model = image,
+                            contentDescription = item.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+
+                    if (inLibrary) {
+                        AioPlayMiniBadge(
+                            text = "LIBRARY",
+                            modifier = Modifier.align(Alignment.TopEnd).padding(7.dp)
+                        )
+                    } else if (watched) {
+                        AioPlayMiniBadge(
+                            text = "✓ WATCHED",
+                            modifier = Modifier.align(Alignment.TopEnd).padding(7.dp)
+                        )
+                    }
+
+                    if (section == AioPlaySection.CONTINUE) {
+                        AioPlayMiniBadge(
+                            text = "RESUME",
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(7.dp)
+                        )
+                    }
+
+                    if (isFocused) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(AioPlayFocusSheen)
+                        )
+                    }
+
+                    if (progress > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .background(Color.Black.copy(alpha = 0.55f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progress)
+                                    .fillMaxHeight()
+                                    .background(AioPlayAccentCyan)
+                            )
+                        }
+                    }
+                }
+            }
+
+            FocusMarqueeText(
+                text = item.name,
+                focused = isFocused,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp
+                ),
+                color = NuvioTheme.colors.TextPrimary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        top = 4.dp,
+                        start = NuvioTheme.spacing.xxs,
+                        end = NuvioTheme.spacing.xxs
+                    )
+            )
+
+            if (section == AioPlaySection.CONTINUE && !item.description.isNullOrBlank()) {
+                Text(
+                    text = item.description,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 8.5.sp,
+                        lineHeight = 10.sp
+                    ),
+                    color = Color.White.copy(alpha = 0.62f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = NuvioTheme.spacing.xxs)
+                )
+            }
+        }
+        return
+    }
+
+    val shape = RoundedCornerShape(12.dp)
+    var isFocused by remember { mutableStateOf(false) }
+
+    Card(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (liveCardHeight != null) {
+                    Modifier.height(liveCardHeight)
+                } else {
+                    Modifier.aspectRatio(16f / 9f)
+                }
+            )
+            .onFocusChanged { isFocused = it.isFocused },
+        shape = CardDefaults.shape(shape = shape),
+        colors = CardDefaults.colors(
+            containerColor = NuvioTheme.colors.BackgroundCard,
+            focusedContainerColor = NuvioTheme.colors.BackgroundCard
+        ),
+        border = CardDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.5.dp, AioPlayAccentGradient),
+                shape = shape
+            )
+        ),
+        scale = CardDefaults.scale(focusedScale = 1.045f)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(shape)
+                .background(NuvioTheme.colors.BackgroundCard)
+        ) {
+            val image = item.background ?: item.poster
+            if (!image.isNullOrBlank()) {
+                AsyncImage(
+                    model = image,
+                    contentDescription = item.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.16f),
+                                Color.Black.copy(alpha = 0.82f)
+                            )
+                        )
+                    )
+            )
+
+            AioPlayMiniBadge(
+                text = "● LIVE",
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+            )
+
+            if (isFocused) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(AioPlayFocusSheen)
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(10.dp)
+            ) {
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 11.sp,
+                        lineHeight = 13.sp
+                    ),
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!item.description.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = item.description.lineSequence().firstOrNull().orEmpty(),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 9.sp,
+                            lineHeight = 11.sp
+                        ),
+                        color = Color.White.copy(alpha = 0.70f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayMiniBadge(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xB814181D))
+            .padding(horizontal = 7.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 8.sp,
+                lineHeight = 9.sp
+            ),
+            color = Color.White.copy(alpha = 0.88f),
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun AioPlaySearchSkeleton() {
+    val pulse by rememberInfiniteTransition(label = "AIOPlay search loading pulse").animateFloat(
+        initialValue = 0.24f, targetValue = 0.46f,
+        animationSpec = infiniteRepeatable(animation = tween(850), repeatMode = RepeatMode.Reverse),
+        label = "AIOPlay search loading alpha"
+    )
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val columns = 6
+        val gap = 9.dp
+        val cardWidth = (maxWidth - gap * (columns - 1)) / columns
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            repeat(columns) {
+                Column(Modifier.weight(1f)) {
+                    Box(Modifier.fillMaxWidth().height(cardWidth * 1.5f).clip(RoundedCornerShape(10.dp)).background(Color.White.copy(alpha = pulse)))
+                    Spacer(Modifier.height(5.dp))
+                    Box(Modifier.fillMaxWidth(.66f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color.White.copy(alpha = pulse * .72f)))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayCatalogSkeleton(
+    posterMode: Boolean
+) {
+    val pulse by rememberInfiniteTransition(label = "AIOPlay loading pulse")
+        .animateFloat(
+            initialValue = 0.24f,
+            targetValue = 0.46f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 850),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "AIOPlay loading alpha"
+        )
+
+    val columnCount = if (posterMode) 6 else 3
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val rowSpacing = if (posterMode) 6.dp else 8.dp
+        val columnSpacing = if (posterMode) 9.dp else 10.dp
+        val rowHeight = (maxHeight - rowSpacing) / 2
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(rowSpacing)
+        ) {
+            repeat(2) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(rowHeight),
+                    horizontalArrangement = Arrangement.spacedBy(columnSpacing),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(columnCount) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (posterMode) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(2f / 3f)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(Color.White.copy(alpha = pulse))
+                                    )
+                                    Spacer(modifier = Modifier.height(5.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.66f)
+                                            .height(8.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(Color.White.copy(alpha = pulse * 0.72f))
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(rowHeight - 8.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color.White.copy(alpha = pulse))
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlaySeriesScreen(
+    series: AioPlayItem,
+    viewModel: AioPlayViewModel,
+    onEpisode: (AioPlayItem) -> Unit,
+    onBack: () -> Unit
+) {
+    BackHandler(onBack = onBack)
+    var details by remember(series.id) { mutableStateOf<AioPlayMetaDetails?>(null) }
+    var loading by remember(series.id) { mutableStateOf(true) }
+    var error by remember(series.id) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(series.id) {
+        loading = true
+        error = null
+        viewModel.loadVodMeta("series", series.id)
+            .onSuccess { details = it }
+            .onFailure { error = it.message ?: "Series details could not be loaded." }
+        loading = false
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AioPlayBackgroundGradient)
+            .padding(28.dp)
+    ) {
+        val artwork = details?.item?.poster ?: series.poster
+        if (!artwork.isNullOrBlank()) {
+            AsyncImage(
+                model = artwork,
+                contentDescription = series.name,
+                modifier = Modifier
+                    .width(210.dp)
+                    .aspectRatio(2f / 3f)
+                    .clip(RoundedCornerShape(14.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.width(28.dp))
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+        ) {
+            Text(
+                text = details?.item?.name ?: series.name,
+                style = MaterialTheme.typography.headlineMedium,
+                color = NuvioTheme.colors.TextPrimary,
+                fontWeight = FontWeight.SemiBold
+            )
+            details?.item?.description?.takeIf { it.isNotBlank() }?.let { description ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = NuvioTheme.colors.TextSecondary,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.height(18.dp))
+
+            when {
+                loading -> AioPlayLoadingLabel("Loading episodes…")
+                error != null -> Text(
+                    text = error.orEmpty(),
+                    color = NuvioTheme.colors.Error
+                )
+                details?.videos.isNullOrEmpty() -> Text(
+                    text = "No episodes are available.",
+                    color = NuvioTheme.colors.TextSecondary
+                )
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp)
+                    ) {
+                        items(details!!.videos, key = { it.id }) { video ->
+                            val label = buildString {
+                                if (video.season != null && video.episode != null) {
+                                    append("S")
+                                    append(video.season.toString().padStart(2, '0'))
+                                    append("E")
+                                    append(video.episode.toString().padStart(2, '0'))
+                                    append("  ")
+                                }
+                                append(video.title)
+                            }
+                            AioPlayNavCard(
+                                text = label,
+                                selected = false,
+                                onClick = {
+                                    onEpisode(
+                                        AioPlayItem(
+                                            id = video.id,
+                                            type = "series",
+                                            name = video.title,
+                                            description = null,
+                                            poster = details?.item?.poster ?: series.poster,
+                                            background = details?.item?.background ?: series.background,
+                                            logo = details?.item?.logo ?: series.logo
+                                        )
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayPlaybackLoadingScreen(
+    item: AioPlayItem,
+    contentType: String,
+    sessionId: String,
+    viewModel: AioPlayViewModel,
+    onReady: (AioPlayPlayback) -> Unit,
+    onBack: () -> Unit
+) {
+    BackHandler(onBack = onBack)
+    var error by remember { mutableStateOf<String?>(null) }
+    var attempt by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(item.id, contentType, sessionId, attempt) {
+        error = null
+        var result = if (sessionId.isBlank()) {
+            viewModel.startPlayback(item, contentType)
+        } else {
+            viewModel.nextPlayback(sessionId)
+        }
+
+        var resolved = result.getOrNull()
+        var safety = 0
+
+        // TV playback accepts direct media only. Web/embed-only targets are
+        // silently skipped; the viewer never sees their names or a picker.
+        while (resolved != null && resolved.target.kind != "direct" && safety < 10) {
+            result = viewModel.nextPlayback(resolved.sessionId)
+            resolved = result.getOrNull()
+            safety++
+        }
+
+        if (resolved != null && resolved.target.kind == "direct") {
+            onReady(resolved)
+        } else {
+            error = result.exceptionOrNull()?.message
+                ?: "No playable stream is available right now."
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AioPlayBackgroundGradient),
+        contentAlignment = Alignment.Center
+    ) {
+        val artwork = item.background ?: item.poster
+        if (!artwork.isNullOrBlank()) {
+            AsyncImage(
+                model = artwork,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(AioPlayContentDim)
+                .background(AioPlayHeroSideGradient)
+                .background(AioPlayHeroBottomGradient)
+        )
+
+        if (error == null) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                if (!item.logo.isNullOrBlank()) {
+                    AsyncImage(
+                        model = item.logo,
+                        contentDescription = item.parentName ?: item.name,
+                        modifier = Modifier
+                            .width(280.dp)
+                            .height(92.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Text(
+                        text = item.parentName ?: item.name,
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = NuvioTheme.colors.TextPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .width(24.dp)
+                        .height(24.dp),
+                    strokeWidth = 2.dp,
+                    color = AioPlayAccentCyan
+                )
+                Text(
+                    text = if (sessionId.isBlank()) {
+                        "Preparing playback"
+                    } else {
+                        "Recovering playback"
+                    },
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp
+                    ),
+                    color = Color.White.copy(alpha = 0.68f)
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .width(520.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(AioPlayDetailCard.copy(alpha = 0.88f))
+                    .padding(26.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = error.orEmpty(),
+                    color = NuvioTheme.colors.TextPrimary,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { attempt++ }) {
+                        Text("Retry")
+                    }
+                    Button(onClick = onBack) {
+                        Text("Back")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayLoadingLabel(text: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        CircularProgressIndicator(color = NuvioTheme.colors.Secondary)
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = NuvioTheme.colors.TextSecondary
+        )
+    }
+}
+
+@Composable
+private fun AioPlayAccountScreen(
+    user: AioPlayUser?,
+    vodEnabled: Boolean,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    BackHandler(onBack = onBack)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AioPlayBackgroundGradient),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .width(520.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(AioPlayDetailCard)
+                .padding(32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = user?.displayName?.ifBlank { user.username } ?: "Account",
+                style = MaterialTheme.typography.headlineSmall,
+                color = NuvioTheme.colors.TextPrimary
+            )
+            Text(
+                text = "@" + user?.username.orEmpty(),
+                color = NuvioTheme.colors.TextSecondary
+            )
+            Text(
+                text = if (vodEnabled) {
+                    "Sports and VOD are enabled by the server."
+                } else {
+                    "Sports is enabled. VOD can be enabled later by the server administrator."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = NuvioTheme.colors.TextSecondary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = onRefresh,
+                colors = ButtonDefaults.colors(
+                    containerColor = AioPlayPillIdle,
+                    focusedContainerColor = AioPlayAccentBlue
+                )
+            ) {
+                Text("Refresh content")
+            }
+            Button(
+                onClick = onSignOut,
+                colors = ButtonDefaults.colors(
+                    containerColor = AioPlayPillIdle,
+                    focusedContainerColor = AioPlayAccentViolet
+                )
+            ) {
+                Text("Sign out")
+            }
+            Button(
+                onClick = onBack,
+                colors = ButtonDefaults.colors(
+                    containerColor = AioPlayPillIdle,
+                    focusedContainerColor = AioPlayAccentBlue
+                )
+            ) {
+                Text("Back")
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayCenteredStatus(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AioPlayBackgroundGradient),
+        contentAlignment = Alignment.Center
+    ) {
+        AioPlayLoadingLabel(text)
+    }
+}
+
+
+@Composable
+private fun AioPlayFullWidthLibraryScreen(
+    state: AioPlayUiState,
+    onSection: (AioPlaySection) -> Unit,
+    onItem: (AioPlayItem) -> Unit,
+    onSearch: () -> Unit,
+    onSettings: () -> Unit,
+    isInLibrary: (AioPlayItem) -> Boolean,
+    isWatched: (AioPlayItem) -> Boolean
+) {
+    val title = if (state.selectedSection == AioPlaySection.CONTINUE) "Continue Watching" else "Library"
+    Box(Modifier.fillMaxSize().background(AioPlayBackgroundGradient)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 38.dp, vertical = 22.dp)) {
+            AioPlaySharedTopBar(state.selectedSection, onSection, onSearch, onSettings)
+            Spacer(Modifier.height(20.dp))
+            Text(title, style=MaterialTheme.typography.headlineMedium, color=NuvioTheme.colors.TextPrimary, fontWeight=FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+            when {
+                state.loadingCatalog && state.items.isEmpty() -> AioPlayCatalogSkeleton(posterMode=true)
+                state.items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) {
+                    Text(state.error ?: if (state.selectedSection == AioPlaySection.CONTINUE) "Nothing to continue watching yet." else "Your library is empty.", color=NuvioTheme.colors.TextSecondary)
+                }
+                else -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp), contentPadding=PaddingValues(bottom=28.dp)) {
+                    items(state.items.chunked(6)) { row ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                            row.forEach { item ->
+                                Box(Modifier.weight(1f)) {
+                                    AioPlayContentCard(
+                                        item=item,
+                                        section=state.selectedSection,
+                                        posterMode=true,
+                                        onClick={onItem(item)},
+                                        inLibrary=isInLibrary(item),
+                                        watched=isWatched(item)
+                                    )
+                                }
+                            }
+                            repeat(6-row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlaySharedTopBar(
+    selected: AioPlaySection,
+    onSection: (AioPlaySection) -> Unit,
+    onSearch: () -> Unit,
+    onSettings: () -> Unit,
+    searchSelected: Boolean = false
+) {
+    Row(
+        Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(26.dp))
+            .background(Brush.verticalGradient(listOf(Color.White.copy(alpha=.16f), Color.White.copy(alpha=.055f))))
+            .padding(horizontal=8.dp, vertical=5.dp),
+        verticalAlignment=Alignment.CenterVertically
+    ) {
+        listOf(
+            AioPlaySection.VOD to "VOD",
+            AioPlaySection.COLLECTIONS to "Collections",
+            AioPlaySection.CONTINUE to "Continue Watching",
+            AioPlaySection.LIBRARY to "Library"
+        ).forEachIndexed { index, pair ->
+            if(index>0) Spacer(Modifier.width(6.dp))
+            AioPlaySectionCard(pair.second, selected==pair.first, {onSection(pair.first)})
+        }
+        Spacer(Modifier.width(6.dp))
+        AioPlaySectionCard("Search", searchSelected, onSearch)
+        Spacer(Modifier.weight(1f))
+        Button(onClick=onSettings, colors=ButtonDefaults.colors(containerColor=Color.Transparent, focusedContainerColor=Color.White.copy(alpha=.28f))) {
+            Icon(Icons.Default.Settings, contentDescription="Settings")
+        }
+    }
+}
+
+@Composable
+private fun AioPlayCollectionsScreen(
+    state: AioPlayUiState,
+    onSection: (AioPlaySection) -> Unit,
+    onFolder: (AioPlayCollectionFolder) -> Unit,
+    onBackFolder: () -> Unit,
+    onItem: (AioPlayItem) -> Unit,
+    onSearch: () -> Unit,
+    onSettings: () -> Unit
+) {
+    val firstFocus = remember { FocusRequester() }
+    var focusedFolder by remember { mutableStateOf<AioPlayCollectionFolder?>(null) }
+    var lastFolderId by rememberSaveable { mutableStateOf<String?>(null) }
+    val folderRequesters = remember(state.collections) {
+        state.collections.flatMap { it.folders }.associate { it.id to FocusRequester() }
+    }
+    BackHandler(enabled = state.selectedCollectionFolder != null) { onBackFolder() }
+    LaunchedEffect(state.selectedCollectionFolder) {
+        if (state.selectedCollectionFolder == null && lastFolderId != null) {
+            delay(120)
+            runCatching { folderRequesters[lastFolderId]?.requestFocus() }
+        }
+    }
+    val heroArtwork = focusedFolder?.heroBackdropUrl ?: focusedFolder?.coverImageUrl
+    Box(Modifier.fillMaxSize().background(AioPlayBackgroundGradient)) {
+        Crossfade(targetState=heroArtwork, animationSpec=tween(260), label="Collection backdrop") { artwork ->
+            if (!artwork.isNullOrBlank()) AsyncImage(model=artwork, contentDescription=null, modifier=Modifier.fillMaxSize(), contentScale=ContentScale.Crop)
+        }
+        Box(Modifier.fillMaxSize().background(AioPlayContentDim).background(AioPlayHeroSideGradient).background(AioPlayHeroBottomGradient))
+        Column(Modifier.fillMaxSize().padding(horizontal = 38.dp, vertical = 22.dp)) {
+            AioPlaySharedTopBar(AioPlaySection.COLLECTIONS, onSection, onSearch, onSettings)
+            Spacer(Modifier.height(18.dp))
+            val folder = state.selectedCollectionFolder
+            if (folder != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AioPlaySectionCard("Back", false, onBackFolder)
+                    Spacer(Modifier.width(14.dp))
+                    Text(folder.name, style=MaterialTheme.typography.headlineSmall, color=NuvioTheme.colors.TextPrimary, fontWeight=FontWeight.Bold)
+                }
+                Spacer(Modifier.height(14.dp))
+                if (state.loadingCatalog && state.items.isEmpty()) AioPlayCatalogSkeleton(posterMode=true)
+                else AioPlayCollectionTitleGrid(state.items, onItem, firstFocus)
+            } else {
+                Text("Collections", style=MaterialTheme.typography.headlineMedium, color=NuvioTheme.colors.TextPrimary, fontWeight=FontWeight.Bold)
+                focusedFolder?.takeIf { !it.hideTitle }?.let {
+                    Text(it.name, style=MaterialTheme.typography.bodyMedium, color=NuvioTheme.colors.TextSecondary, maxLines=1, overflow=TextOverflow.Ellipsis)
+                }
+                Spacer(Modifier.height(12.dp))
+                if (state.collections.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) { Text(state.error ?: "No collections are available.", color=NuvioTheme.colors.TextSecondary) }
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(18.dp), contentPadding = PaddingValues(bottom=30.dp)) {
+                        items(state.collections, key={it.id}) { collection ->
+                            Column {
+                                Text(collection.name, style=MaterialTheme.typography.titleLarge, color=NuvioTheme.colors.TextPrimary, fontWeight=FontWeight.SemiBold)
+                                Spacer(Modifier.height(8.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    items(collection.folders, key={it.id}) { item ->
+                                        AioPlayCollectionFolderCard(
+                                            folder=item,
+                                            onClick={ lastFolderId=item.id; onFolder(item) },
+                                            onFocused={ focusedFolder=item },
+                                            modifier=Modifier.then(folderRequesters[item.id]?.let { Modifier.focusRequester(it) } ?: Modifier)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AioPlayCollectionFolderCard(
+    folder: AioPlayCollectionFolder,
+    onClick: () -> Unit,
+    onFocused: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val landscape = folder.tileShape.equals("LANDSCAPE", true)
+    var focused by remember { mutableStateOf(false) }
+    val artwork = if (focused && folder.focusGifEnabled && !folder.focusGifUrl.isNullOrBlank()) folder.focusGifUrl else folder.coverImageUrl ?: folder.heroBackdropUrl
+    Card(
+        onClick=onClick,
+        modifier=modifier.width(if(landscape) 100.dp else 57.dp).height(if(landscape) 57.dp else 84.dp).onFocusChanged { state -> focused=state.isFocused; if(state.isFocused) onFocused() },
+        shape=CardDefaults.shape(RoundedCornerShape(12.dp))
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            AsyncImage(model=artwork, contentDescription=folder.name, modifier=Modifier.fillMaxSize(), contentScale=ContentScale.Crop)
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha=.72f)))))
+            if (!folder.hideTitle) Text(folder.name, modifier=Modifier.align(Alignment.BottomStart).padding(10.dp), color=Color.White, style=MaterialTheme.typography.titleSmall, fontWeight=FontWeight.SemiBold, maxLines=2, overflow=TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun AioPlayCollectionTitleGrid(items: List<AioPlayItem>, onItem: (AioPlayItem)->Unit, firstFocus: FocusRequester) {
+    if (items.isEmpty()) { Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) { Text("Nothing is available in this collection.", color=NuvioTheme.colors.TextSecondary) }; return }
+    LazyColumn(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        items(items.chunked(6)) { row ->
+            Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                row.forEachIndexed { index, item ->
+                    Column(modifier=Modifier.width(142.dp)) {
+                        Card(onClick={onItem(item)}, modifier=Modifier.fillMaxWidth().height(190.dp).then(if(index==0 && item==items.first()) Modifier.focusRequester(firstFocus) else Modifier)) {
+                            AsyncImage(model=item.poster ?: item.background, contentDescription=item.name, modifier=Modifier.fillMaxSize(), contentScale=ContentScale.Crop)
+                        }
+                        Spacer(Modifier.height(5.dp))
+                        Text(
+                            text=item.name,
+                            color=NuvioTheme.colors.TextPrimary,
+                            style=MaterialTheme.typography.bodySmall.copy(fontSize=10.sp, lineHeight=12.sp),
+                            fontWeight=FontWeight.Medium,
+                            maxLines=1,
+                            overflow=TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

@@ -892,6 +892,8 @@ private fun AioPlaySearchScreen(
 
     var query by rememberSaveable { mutableStateOf("") }
     var selectedType by rememberSaveable { mutableStateOf("all") }
+    var personName by rememberSaveable { mutableStateOf("") }
+    var personRole by rememberSaveable { mutableStateOf("") }
     var results by remember { mutableStateOf<List<AioPlayItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -914,8 +916,8 @@ private fun AioPlaySearchScreen(
         }
     }
 
-    LaunchedEffect(query, selectedType) {
-        val clean = query.trim()
+    LaunchedEffect(query, selectedType, personName) {
+        val clean = (personName.takeIf { it.isNotBlank() } ?: query).trim()
         if (clean.length < 2) {
             loading = false
             error = null
@@ -929,7 +931,7 @@ private fun AioPlaySearchScreen(
         delay(320)
         loading = true
         error = null
-        val type = selectedType.takeIf { it == "movie" || it == "series" }
+        val type = if (personName.isNotBlank()) null else selectedType.takeIf { it == "movie" || it == "series" }
         viewModel.searchVod(clean, type)
             .onSuccess { rows ->
                 results = if (selectedType == "anime") {
@@ -1049,7 +1051,7 @@ private fun AioPlaySearchScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Search",
+                    text = if (personName.isNotBlank()) "People" else "Search",
                     style = MaterialTheme.typography.headlineSmall,
                     color = NuvioTheme.colors.TextPrimary,
                     fontWeight = FontWeight.SemiBold
@@ -1057,8 +1059,14 @@ private fun AioPlaySearchScreen(
 
                 InputField(
                     value = query,
-                    onValueChange = { query = it },
-                    placeholder = "Search all titles",
+                    onValueChange = { value ->
+                        query = value
+                        if (personName.isNotBlank() && value.trim() != personName) {
+                            personName = ""
+                            personRole = ""
+                        }
+                    },
+                    placeholder = if (personName.isNotBlank()) "Titles featuring $personName" else "Search all titles",
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Done,
                     startEditing = restoreResultToken <= 0,
@@ -1104,6 +1112,23 @@ private fun AioPlaySearchScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
+
+            if (personName.isNotBlank()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(personName, color = NuvioTheme.colors.TextPrimary, fontWeight = FontWeight.SemiBold)
+                        if (personRole.isNotBlank()) Text(personRole, style = MaterialTheme.typography.bodySmall, color = NuvioTheme.colors.TextSecondary)
+                    }
+                    AioPlaySectionCard(text = "Clear person", selected = false, onClick = {
+                        personName = ""; personRole = ""; query = ""
+                        runCatching { queryFocus.requestFocus() }
+                    }, modifier = Modifier.width(132.dp))
+                }
+            }
 
             AioPlayFocusedHeroInfo(
                 item = heroItem ?: results.firstOrNull(),

@@ -52,7 +52,8 @@ internal fun AioPlayDetailsScreen(
     restoreEpisodeId: String? = null,
     restoreEpisodeSeason: Int? = null,
     restoreEpisodeFocusToken: Int = 0,
-    restoreHeroFocusToken: Int = 0
+    restoreHeroFocusToken: Int = 0,
+    onSearchPerson: (String, String) -> Unit = { _, _ -> }
 ) {
     var visible by remember(preview.id) { mutableStateOf(false) }
     var dismissing by remember(preview.id) { mutableStateOf(false) }
@@ -131,6 +132,7 @@ internal fun AioPlayDetailsScreen(
                     viewModel.setWatched(item, !viewModel.isWatched(item))
                 },
                 isEpisodeWatched = { season, episode -> viewModel.isEpisodeWatched(details!!.item.id, season, episode) },
+                onSearchPerson = onSearchPerson,
                 onToggleEpisodeWatched = { video ->
                     val episodeItem = AioPlayItem(
                         id = video.id,
@@ -166,6 +168,7 @@ private fun AioPlayRichDetails(
     isWatched: Boolean,
     onToggleWatched: () -> Unit,
     isEpisodeWatched: (Int?, Int?) -> Boolean,
+    onSearchPerson: (String, String) -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit
 ) {
     val meta = details.meta
@@ -329,7 +332,7 @@ private fun AioPlayRichDetails(
 
             if (meta.cast.isNotEmpty() || meta.country != null || meta.awards != null) {
                 item(key = "extra-meta") {
-                    AioPlayMetadataSummary(meta)
+                    AioPlayMetadataSummary(meta, onSearchPerson)
                 }
             }
         }
@@ -337,7 +340,7 @@ private fun AioPlayRichDetails(
 }
 
 @Composable
-private fun AioPlayMetadataSummary(meta: Meta) {
+private fun AioPlayMetadataSummary(meta: Meta, onSearchPerson: (String, String) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -350,11 +353,18 @@ private fun AioPlayMetadataSummary(meta: Meta) {
                 style = MaterialTheme.typography.titleMedium,
                 color = NuvioTheme.colors.TextPrimary
             )
-            Text(
-                text = meta.cast.take(10).joinToString(" • "),
-                style = MaterialTheme.typography.bodyMedium,
-                color = NuvioTheme.colors.TextSecondary
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                meta.castMembers.take(8).forEach { member ->
+                    Button(onClick = { onSearchPerson(member.name, member.character ?: "Cast") }) {
+                        Text(member.name, maxLines = 1)
+                    }
+                }
+                if (meta.castMembers.isEmpty()) {
+                    meta.cast.take(8).forEach { name ->
+                        Button(onClick = { onSearchPerson(name, "Cast") }) { Text(name, maxLines = 1) }
+                    }
+                }
+            }
         }
         meta.country?.takeIf { it.isNotBlank() }?.let {
             Text(

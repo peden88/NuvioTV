@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -55,7 +56,7 @@ internal fun AioPlayDetailsScreen(
     restoreEpisodeSeason: Int? = null,
     restoreEpisodeFocusToken: Int = 0,
     restoreHeroFocusToken: Int = 0,
-    onSearchPerson: (String, String) -> Unit = { _, _ -> }
+    onSearchPerson: (String, String, String?) -> Unit = { _, _, _ -> }
 ) {
     var visible by remember(preview.id) { mutableStateOf(false) }
     var dismissing by remember(preview.id) { mutableStateOf(false) }
@@ -170,7 +171,7 @@ private fun AioPlayRichDetails(
     isWatched: Boolean,
     onToggleWatched: () -> Unit,
     isEpisodeWatched: (Int?, Int?) -> Boolean,
-    onSearchPerson: (String, String) -> Unit,
+    onSearchPerson: (String, String, String?) -> Unit,
     onToggleEpisodeWatched: (Video) -> Unit
 ) {
     val meta = details.meta
@@ -332,7 +333,7 @@ private fun AioPlayRichDetails(
                 }
             }
 
-            if (meta.cast.isNotEmpty() || meta.country != null || meta.awards != null) {
+            if (meta.cast.isNotEmpty() || meta.castMembers.isNotEmpty() || meta.director.isNotEmpty() || meta.writer.isNotEmpty() || meta.country != null || meta.awards != null) {
                 item(key = "extra-meta") {
                     AioPlayMetadataSummary(meta, onSearchPerson)
                 }
@@ -342,14 +343,27 @@ private fun AioPlayRichDetails(
 }
 
 @Composable
-private fun AioPlayMetadataSummary(meta: Meta, onSearchPerson: (String, String) -> Unit) {
+private fun AioPlayMetadataSummary(meta: Meta, onSearchPerson: (String, String, String?) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = NuvioTheme.spacing.xxxl, vertical = 22.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        if (meta.cast.isNotEmpty()) {
+        if (meta.director.isNotEmpty() || meta.writer.isNotEmpty()) {
+            Text("Creators & Crew", style = MaterialTheme.typography.titleMedium, color = NuvioTheme.colors.TextPrimary)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(meta.director.distinct().size) { index ->
+                    val name = meta.director.distinct()[index]
+                    Button(onClick = { onSearchPerson(name, "Director", null) }) { Text(name, maxLines = 1) }
+                }
+                items(meta.writer.filterNot { it in meta.director }.distinct().size) { index ->
+                    val name = meta.writer.filterNot { it in meta.director }.distinct()[index]
+                    Button(onClick = { onSearchPerson(name, "Writer", null) }) { Text(name, maxLines = 1) }
+                }
+            }
+        }
+        if (meta.cast.isNotEmpty() || meta.castMembers.isNotEmpty()) {
             Text(
                 text = "Cast",
                 style = MaterialTheme.typography.titleMedium,
@@ -358,14 +372,21 @@ private fun AioPlayMetadataSummary(meta: Meta, onSearchPerson: (String, String) 
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(meta.castMembers.take(12).size) { index ->
                     val member = meta.castMembers[index]
-                    Button(onClick = { onSearchPerson(member.name, member.character ?: "Cast") }) {
-                        Text(member.name, maxLines = 1)
+                    Button(onClick = { onSearchPerson(member.name, member.character ?: "Cast", member.photo) }) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (!member.photo.isNullOrBlank()) {
+                                AsyncImage(model = member.photo, contentDescription = null,
+                                    modifier = Modifier.height(38.dp).width(30.dp).clip(RoundedCornerShape(6.dp)),
+                                    contentScale = ContentScale.Crop)
+                            }
+                            Text(member.name, maxLines = 1)
+                        }
                     }
                 }
                 if (meta.castMembers.isEmpty()) {
                     items(meta.cast.take(12).size) { index ->
                         val name = meta.cast[index]
-                        Button(onClick = { onSearchPerson(name, "Cast") }) { Text(name, maxLines = 1) }
+                        Button(onClick = { onSearchPerson(name, "Cast", null) }) { Text(name, maxLines = 1) }
                     }
                 }
             }

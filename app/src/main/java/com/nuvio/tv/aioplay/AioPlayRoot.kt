@@ -479,6 +479,18 @@ private fun AioPlaySignedInApp(
             val originId by entry.savedStateHandle
                 .getStateFlow("aioplay_search_origin_id", "")
                 .collectAsState()
+            val originTitle by entry.savedStateHandle
+                .getStateFlow("aioplay_search_origin_title", "")
+                .collectAsState()
+            val originPoster by entry.savedStateHandle
+                .getStateFlow("aioplay_search_origin_poster", "")
+                .collectAsState()
+            val originBackdrop by entry.savedStateHandle
+                .getStateFlow("aioplay_search_origin_backdrop", "")
+                .collectAsState()
+            val originLogo by entry.savedStateHandle
+                .getStateFlow("aioplay_search_origin_logo", "")
+                .collectAsState()
 
             AioPlaySearchScreen(
                 viewModel = viewModel,
@@ -489,10 +501,22 @@ private fun AioPlaySignedInApp(
                 initialPersonPhoto = searchPersonPhoto,
                 onClearPerson = {
                     if (originType.isNotBlank() && originId.isNotBlank()) {
-                        navController.navigate(detailRoute(AioPlayItem(id = originId, type = originType, name = originId, description = null, poster = null, background = null, logo = null)))
+                        navController.navigate(detailRoute(AioPlayItem(
+                            id = originId,
+                            type = originType,
+                            name = originTitle.ifBlank { originId },
+                            description = null,
+                            poster = originPoster.takeIf { it.isNotBlank() },
+                            background = originBackdrop.takeIf { it.isNotBlank() },
+                            logo = originLogo.takeIf { it.isNotBlank() }
+                        )))
                     }
                     entry.savedStateHandle["aioplay_search_origin_type"] = ""
                     entry.savedStateHandle["aioplay_search_origin_id"] = ""
+                    entry.savedStateHandle["aioplay_search_origin_title"] = ""
+                    entry.savedStateHandle["aioplay_search_origin_poster"] = ""
+                    entry.savedStateHandle["aioplay_search_origin_backdrop"] = ""
+                    entry.savedStateHandle["aioplay_search_origin_logo"] = ""
                 },
                 onPersonContextConsumed = {
                     entry.savedStateHandle["aioplay_search_person_name"] = ""
@@ -599,6 +623,10 @@ private fun AioPlaySignedInApp(
                         searchState["aioplay_search_person_photo"] = photo.orEmpty()
                         searchState["aioplay_search_origin_type"] = preview.type
                         searchState["aioplay_search_origin_id"] = preview.id
+                        searchState["aioplay_search_origin_title"] = preview.name
+                        searchState["aioplay_search_origin_poster"] = preview.poster.orEmpty()
+                        searchState["aioplay_search_origin_backdrop"] = preview.background.orEmpty()
+                        searchState["aioplay_search_origin_logo"] = preview.logo.orEmpty()
                     }
                 }
             )

@@ -459,6 +459,20 @@ class AioPlayApiClient @Inject constructor(
         }
     }
 
+    suspend fun personCredits(token: String, personId: Long): List<AioPlayItem> {
+        if (personId <= 0L) return emptyList()
+        val json = requestJson("/api/v1/vod/person/" + personId, token = token)
+        val rows = json.optJSONArray("credits") ?: return emptyList()
+        return buildList {
+            val seen = mutableSetOf<String>()
+            for (i in 0 until rows.length()) {
+                val row = rows.optJSONObject(i) ?: continue
+                val item = parseItem(row, row.optString("type")) ?: continue
+                if (seen.add(item.type + "|" + item.id)) add(item)
+            }
+        }
+    }
+
     suspend fun vodMeta(
         token: String,
         type: String,

@@ -26,6 +26,7 @@ object DeepLinkParser {
 
         return when (host) {
             "meta" -> parseMetaFromParameters(parsedUrl) ?: parseMetaFromPath(pathSegments)
+            "search" -> parseSearchDeepLink(parsedUrl, pathSegments)
             "detail", "details", "open", "watch" -> parseMetaFromPath(pathSegments)
             "movie", "movies", "series", "show", "shows", "tv" -> {
                 val type = normalizeMediaType(host)
@@ -42,6 +43,20 @@ object DeepLinkParser {
                 }
             }
         }
+    }
+
+    private fun parseSearchDeepLink(parsedUrl: URI, pathSegments: List<String>): AppDeepLink.Search? {
+        val parameters = queryParameters(parsedUrl)
+        val query = firstParameter(parameters, "q", "query", "title")
+            ?: pathSegments.firstOrNull()
+            ?: return null
+        val normalized = query.trim()
+        if (normalized.isBlank()) return null
+        val openValue = firstParameter(parameters, "open", "action", "target")
+            ?.trim()
+            ?.lowercase()
+        val openFirstMatch = openValue in setOf("detail", "details", "open", "1", "true", "yes")
+        return AppDeepLink.Search(query = normalized, openFirstMatch = openFirstMatch)
     }
 
     private fun parseMetaFromParameters(parsedUrl: URI): AppDeepLink.Meta? {

@@ -129,6 +129,7 @@ class LayoutPreferenceDataStore @Inject constructor(
     private val memoryOnlyVerticalScrollKey = booleanPreferencesKey("memory_only_vertical_scroll")
     private val smoothBringIntoViewEnabledKey = booleanPreferencesKey("smooth_bring_into_view_enabled")
     private val fastHorizontalNavigationEnabledKey = booleanPreferencesKey("fast_horizontal_navigation_enabled")
+    private val autoScrollDescriptionsEnabledKey = booleanPreferencesKey("auto_scroll_descriptions_enabled")
     private val addonHealthEnabledKey = booleanPreferencesKey("addon_health_enabled")
     private val followAddonsOrderKey = booleanPreferencesKey("follow_addons_order")
     private val composeHighlighterEnabledKey = booleanPreferencesKey("compose_highlighter_enabled")
@@ -427,6 +428,10 @@ class LayoutPreferenceDataStore @Inject constructor(
         prefs[fastHorizontalNavigationEnabledKey] ?: false
     }
 
+    val autoScrollDescriptionsEnabled: Flow<Boolean> = profileFlow { prefs ->
+        prefs[autoScrollDescriptionsEnabledKey] ?: false
+    }
+
     val addonHealthEnabled: Flow<Boolean> = profileFlow { prefs ->
         prefs[addonHealthEnabledKey] ?: true
     }
@@ -454,6 +459,12 @@ class LayoutPreferenceDataStore @Inject constructor(
     suspend fun setFastHorizontalNavigationEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[fastHorizontalNavigationEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setAutoScrollDescriptionsEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[autoScrollDescriptionsEnabledKey] = enabled
         }
     }
 

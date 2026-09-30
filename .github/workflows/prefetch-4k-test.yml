@@ -1,0 +1,175 @@
+name: Nuvio Prefetch 4K Test APK
+
+on:
+  push:
+    branches: [feature/prefetch-4k-test]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prefetch-4k-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Test and build Google TV Streamer prefetch APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Configure public Nuvio backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import urllib.request
+
+          discovery_url = "https://api.nuvio.tv/.well-known/nuvio"
+          request = urllib.request.Request(
+              discovery_url,
+              headers={"User-Agent": "NuvioTV-Prefetch-4K-CI/1.0"},
+          )
+          with urllib.request.urlopen(request, timeout=20) as response:
+              config = json.load(response)
+
+          backend = (config.get("backend_url") or "https://api.nuvio.tv").strip().rstrip("/")
+          publishable_key = (config.get("publishable_key") or "").strip()
+
+          if not publishable_key:
+              raise SystemExit("Nuvio discovery did not return a public publishable_key")
+
+          properties = "\n".join([
+              f"NUVIO_SUPABASE_URL={backend}",
+              f"NUVIO_SUPABASE_ANON_KEY={publishable_key}",
+              "NUVIO_SUPABASE_FALLBACK_URL=",
+              "TV_LOGIN_WEB_BASE_URL=https://nuvio.tv/tv-login",
+              "INTRODB_API_URL=https://api.introdb.app/",
+              "",
+          ])
+
+          pathlib.Path("local.properties").write_text(properties)
+          pathlib.Path("local.dev.properties").write_text(properties)
+          print(f"Configured public backend: {backend}")
+          PY
+
+      - name: Install permanent Prefetch 4K signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/nuvio-prefetch-4k.jks"
+          EXPECTED_SHA256='7FB0F9E9A12E6D4CA78E12D29EE2062E820DB5C89CF62C051B1C7635462F7D98'
+
+          base64 --decode .github/test-signing/nuvio-prefetch-4k-debug.jks.b64 > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+
+          ACTUAL_SHA256="$(keytool -list -v             -keystore "$KEYSTORE"             -storepass android             -alias androiddebugkey             | sed -n 's/^[[:space:]]*SHA256: //p'             | tr -d ':'             | tr '[:lower:]' '[:upper:]'             | head -1)"
+
+          test "$ACTUAL_SHA256" = "$EXPECTED_SHA256"
+
+          {
+            echo "PREFETCH_TEST_STORE_FILE=$KEYSTORE"
+            echo "PREFETCH_TEST_STORE_PASSWORD=android"
+            echo "PREFETCH_TEST_KEY_ALIAS=androiddebugkey"
+            echo "PREFETCH_TEST_KEY_PASSWORD=android"
+            echo "PREFETCH_EXPECTED_SIGNER_SHA256=$(echo "$EXPECTED_SHA256" | tr '[:upper:]' '[:lower:]')"
+          } >> "$GITHUB_ENV"
+
+      - name: Run prefetch policy tests
+        run: |
+          ./gradlew             :app:testFullDebugUnitTest             --tests 'com.nuvio.tv.ui.screens.player.NextEpisodeStreamPrefetchPolicyTest'             --no-daemon             --stacktrace
+
+      - name: Set rolling test version
+        shell: bash
+        run: |
+          echo "PREFETCH_TEST_VERSION_CODE=$((200000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "PREFETCH_TEST_VERSION_NAME=1.0.0-prefetch4k.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: Build Google TV Streamer 4K APK
+        run: ./gradlew :app:assembleFullDebug --no-daemon --stacktrace
+
+      - name: Verify and normalize APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_APK='app/build/outputs/apk/full/debug/app-full-armeabi-v7a-debug.apk'
+          RELEASE_APK='Nuvio-Prefetch-4K-arm64-v8a.apk'
+
+          test -f "$SOURCE_APK"
+          cp "$SOURCE_APK" "$RELEASE_APK"
+
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          APKSIGNER="$(find "$SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          test -x "$APKSIGNER"
+
+          "$APKSIGNER" verify --verbose --print-certs "$RELEASE_APK" | tee apk-signature.txt
+
+          ACTUAL_SIGNER_SHA256="$(sed -n 's/^.*certificate SHA-256 digest: //p' apk-signature.txt | head -1)"
+          if [ "$ACTUAL_SIGNER_SHA256" != "$PREFETCH_EXPECTED_SIGNER_SHA256" ]; then
+            echo "Published APK signer changed unexpectedly"
+            echo "Expected: $PREFETCH_EXPECTED_SIGNER_SHA256"
+            echo "Actual:   $ACTUAL_SIGNER_SHA256"
+            exit 1
+          fi
+
+          AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -1)"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$RELEASE_APK" | tee apk-badging.txt
+          grep -q "package: name='com.nuvio.tv.prefetch4k'" apk-badging.txt
+          grep -q "native-code: 'armeabi-v7a'" apk-badging.txt
+          if grep -q "arm64-v8a" apk-badging.txt; then
+            echo "Unexpected arm64-v8a native code found in Google TV Streamer build"
+            exit 1
+          fi
+
+          sha256sum "$RELEASE_APK" | tee APK-SHA256.txt
+          {
+            echo "Target device: Google TV Streamer (4K)"
+            echo "Android platform: Android TV OS 14 compatible"
+            echo "APK ABI: armeabi-v7a"
+            echo "Package: com.nuvio.tv.prefetch4k"
+            echo "Published filename intentionally remains Nuvio-Prefetch-4K-arm64-v8a.apk to preserve Downloader code 2375698."
+          } | tee APK-PLATFORM.txt
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: nuvio-prefetch-4k-${{ github.run_number }}
+          path: |
+            Nuvio-Prefetch-4K-arm64-v8a.apk
+            APK-SHA256.txt
+            apk-signature.txt
+            apk-badging.txt
+            APK-PLATFORM.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish rolling test prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG='prefetch-4k-test'
+          NOTES='Test-only Google TV Streamer 4K build. Package: com.nuvio.tv.prefetch4k. ABI: armeabi-v7a (the Google TV Streamer Android userspace ABI). Uses a dedicated test signing identity and can be installed alongside normal Nuvio builds. Contains dynamic outro-aware next-episode stream prefetch using the current pre-resolve/CDN-prewarm pipeline. The APK asset filename is intentionally unchanged so Downloader code 2375698 continues to resolve to the rolling build.'
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG"               Nuvio-Prefetch-4K-arm64-v8a.apk               APK-SHA256.txt               apk-signature.txt               apk-badging.txt               APK-PLATFORM.txt               --clobber
+          else
+            gh release create "$TAG"               Nuvio-Prefetch-4K-arm64-v8a.apk               APK-SHA256.txt               apk-signature.txt               apk-badging.txt               APK-PLATFORM.txt               --target "$GITHUB_SHA"               --title 'Nuvio Prefetch 4K Test'               --notes "$NOTES"               --prerelease
+          fi

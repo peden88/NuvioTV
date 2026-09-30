@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
@@ -1110,8 +1111,22 @@ fun NuvioNavHost(
         composable(Screen.Search.route) { backStackEntry ->
             val searchViewModel: com.nuvio.tv.ui.screens.search.SearchViewModel =
                 androidx.hilt.navigation.compose.hiltViewModel(backStackEntry)
+            val deepLinkQueryFlow = remember(backStackEntry) {
+                backStackEntry.savedStateHandle.getStateFlow("deep_link_query", "")
+            }
+            val deepLinkAutoOpenFlow = remember(backStackEntry) {
+                backStackEntry.savedStateHandle.getStateFlow("deep_link_auto_open", false)
+            }
+            val deepLinkQuery by deepLinkQueryFlow.collectAsState()
+            val deepLinkAutoOpen by deepLinkAutoOpenFlow.collectAsState()
             SearchScreen(
                 viewModel = searchViewModel,
+                initialDeepLinkQuery = deepLinkQuery.takeIf { it.isNotBlank() },
+                autoOpenInitialResult = deepLinkAutoOpen,
+                onDeepLinkConsumed = {
+                    backStackEntry.savedStateHandle.remove<String>("deep_link_query")
+                    backStackEntry.savedStateHandle.remove<Boolean>("deep_link_auto_open")
+                },
                 onNavigateToDetail = { itemId, itemType, addonBaseUrl ->
                     val heroBackdrop = HeroBackdropState.consumeAndClear()
                     navController.navigate(

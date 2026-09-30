@@ -1425,7 +1425,14 @@ internal fun PlayerRuntimeController.switchToEpisodeStream(
     subtitleAddonRestoredByPersistedPreference = false
     pendingRestoredAddonSubtitle = null
     hasRetriedCurrentStreamAfter416 = false
+    // A new episode is a new failover session. Stable failed-source identities
+    // intentionally survive signed/rotating URL refreshes while recovering the
+    // current episode, but must not blacklist an equivalent source in a later
+    // episode.
+    deadSourceStreamUrls.clear()
+    deadSourceStreamKeys.clear()
     resetErrorRetryState()
+    _uiState.update { it.copy(deadSourceStreamUrls = emptySet()) }
     currentVideoId = targetVideo?.id ?: _uiState.value.episodeStreamsForVideoId ?: currentVideoId
     currentSeason = targetVideo?.season ?: _uiState.value.episodeStreamsSeason ?: currentSeason
     currentEpisode = targetVideo?.episode ?: _uiState.value.episodeStreamsEpisode ?: currentEpisode

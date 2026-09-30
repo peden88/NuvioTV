@@ -3512,4 +3512,8 @@
     <string name="calendar_refresh">Refresh</string>
     <string name="calendar_spoiler_hidden">Episode hidden until previous is watched</string>
 
+    <string name="ratings_open_overlay">Open ratings grid</string>
+    <string name="ratings_close_overlay">Close</string>
+    <string name="ratings_layout_episodes_label">Episodes</string>
+    <string name="ratings_layout_seasons_label">Seasons</string>
 </resources>

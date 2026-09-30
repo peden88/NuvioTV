@@ -1,5 +1,6 @@
 package com.nuvio.tv.ui.screens.detail
 
+import com.nuvio.tv.ui.components.AutoScrollOverflowText
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
@@ -807,11 +808,12 @@ private fun EpisodeCard(
                 )
 
                 if (description.isNotBlank()) {
-                    Text(
+                    AutoScrollOverflowText(
                         text = description,
                         style = descriptionStyle,
+                        color = Color.White.copy(alpha = 0.9f),
                         maxLines = cardMetrics.descriptionMaxLines,
-                        overflow = TextOverflow.Ellipsis
+                        active = isFocused && !suppressMarquee
                     )
                 }
 

@@ -288,6 +288,7 @@ fun PlaybackSettingsContent(
                 onSetLoadingOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setLoadingOverlayEnabled(enabled) } },
                 onSetPauseOverlayEnabled = { enabled -> coroutineScope.launch { viewModel.setPauseOverlayEnabled(enabled) } },
                 onSetOsdClockEnabled = { enabled -> coroutineScope.launch { viewModel.setOsdClockEnabled(enabled) } },
+                onSetSeekIntervalSeconds = { seconds -> coroutineScope.launch { viewModel.setSeekIntervalSeconds(seconds) } },
                 onSetSkipIntroEnabled = { enabled -> coroutineScope.launch { viewModel.setSkipIntroEnabled(enabled) } },
                 onSetSkipSourcePolicy = { policy -> coroutineScope.launch { viewModel.setSkipSourcePolicy(policy) } },
                 onSetSkipSourceEnabled = { source, enabled ->

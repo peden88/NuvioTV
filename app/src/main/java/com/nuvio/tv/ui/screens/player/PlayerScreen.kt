@@ -757,7 +757,8 @@ fun PlayerScreen(
                     mode = mode,
                     canceled = keyEvent.nativeKeyEvent.isCanceled,
                     eventTimeMs = keyEvent.nativeKeyEvent.eventTime,
-                    allowDpadSeek = false
+                    allowDpadSeek = false,
+                    baseSeekStepMs = uiState.seekIntervalSeconds * 1_000L
                 )
                 dispatchRemoteActions(result.actions)
                 result.consumed
@@ -2519,6 +2520,7 @@ private fun PlayerControlsProgressBarHost(
     onFocused: (() -> Unit)? = null
 ) {
     val playbackTimeline by viewModel.playbackTimeline.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     ProgressBar(
         currentPosition = playbackTimeline.currentPosition,
@@ -2538,7 +2540,8 @@ private fun PlayerControlsProgressBarHost(
         downFocusRequester = downFocusRequester,
         onUpKey = onUpKey,
         onFocused = onFocused,
-        bufferedPosition = playbackTimeline.bufferedPosition
+        bufferedPosition = playbackTimeline.bufferedPosition,
+        baseSeekStepMs = uiState.seekIntervalSeconds * 1_000L
     )
 }
 
@@ -2794,7 +2797,9 @@ private fun ProgressBar(
     onUpKey: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null,
     /** Position (ms) up to which content is buffered. Pass 0 to skip the overlay. */
-    bufferedPosition: Long = 0L
+    bufferedPosition: Long = 0L,
+    /** User-selected single-press seek interval. */
+    baseSeekStepMs: Long = PlayerScrubRates.STEP_SHORT_MS
 ) {
     val progress = if (duration > 0) {
         (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
@@ -2851,7 +2856,8 @@ private fun ProgressBar(
                         mode = PlayerRemoteInputMode.CONTROLS_VISIBLE,
                         canceled = keyEvent.nativeKeyEvent.isCanceled,
                         eventTimeMs = keyEvent.nativeKeyEvent.eventTime,
-                        allowDpadSeek = true
+                        allowDpadSeek = true,
+                        baseSeekStepMs = baseSeekStepMs
                     )
                     result.actions.forEach { action ->
                         when (action) {

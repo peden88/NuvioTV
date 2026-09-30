@@ -6,6 +6,11 @@ sealed interface AppDeepLink {
         val id: String
     ) : AppDeepLink
 
+    data class Search(
+        val query: String,
+        val openFirstMatch: Boolean = false
+    ) : AppDeepLink
+
     data class AddonInstall(
         val manifestUrl: String
     ) : AppDeepLink

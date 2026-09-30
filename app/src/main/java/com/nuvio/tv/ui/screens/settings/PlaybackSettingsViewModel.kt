@@ -204,6 +204,10 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setOsdClockEnabled(enabled)
     }
 
+    suspend fun setSeekIntervalSeconds(seconds: Int) {
+        playerSettingsDataStore.setSeekIntervalSeconds(seconds)
+    }
+
     suspend fun setSkipIntroEnabled(enabled: Boolean) {
         playerSettingsDataStore.setSkipIntroEnabled(enabled)
     }

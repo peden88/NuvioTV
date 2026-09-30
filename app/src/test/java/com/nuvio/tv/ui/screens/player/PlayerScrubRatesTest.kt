@@ -27,4 +27,18 @@ class PlayerScrubRatesTest {
     fun stepMsForHold_negativeHoldUsesBaseStep() {
         assertEquals(PlayerScrubRates.STEP_SHORT_MS, PlayerScrubRates.stepMsForHold(-1L))
     }
+
+    @org.junit.Test
+    fun `selected interval drives tap seek and doubles on long hold`() {
+        org.junit.Assert.assertEquals(15_000L, PlayerScrubRates.stepMsForHold(0L, 15_000L))
+        org.junit.Assert.assertEquals(30_000L, PlayerScrubRates.stepMsForHold(3_000L, 15_000L))
+        org.junit.Assert.assertEquals(30_000L, PlayerScrubRates.stepMsForHold(0L, 30_000L))
+        org.junit.Assert.assertEquals(60_000L, PlayerScrubRates.stepMsForHold(3_000L, 30_000L))
+    }
+
+    @org.junit.Test
+    fun `selected interval keeps seek direction`() {
+        org.junit.Assert.assertEquals(25_000L, PlayerScrubRates.deltaMsForHold(0L, true, 25_000L))
+        org.junit.Assert.assertEquals(-25_000L, PlayerScrubRates.deltaMsForHold(0L, false, 25_000L))
+    }
 }

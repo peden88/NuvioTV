@@ -969,6 +969,7 @@ private fun AioPlaySearchScreen(
     var personName by rememberSaveable { mutableStateOf(initialPersonName) }
     var personRole by rememberSaveable { mutableStateOf(initialPersonRole) }
     var personPhoto by rememberSaveable { mutableStateOf(initialPersonPhoto) }
+    var personCreditFilter by rememberSaveable { mutableStateOf("all") }
     var results by remember { mutableStateOf<List<AioPlayItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -991,6 +992,12 @@ private fun AioPlaySearchScreen(
             personPhoto = initialPersonPhoto
             query = initialPersonName
             selectedType = "all"
+            personCreditFilter = when {
+                initialPersonRole.contains("director", ignoreCase = true) -> "directing"
+                initialPersonRole.contains("writer", ignoreCase = true) || initialPersonRole.contains("creator", ignoreCase = true) -> "writing"
+                initialPersonRole.contains("cast", ignoreCase = true) || initialPersonRole.contains("actor", ignoreCase = true) -> "acting"
+                else -> "all"
+            }
             onPersonContextConsumed()
         }
     }
@@ -1222,10 +1229,30 @@ private fun AioPlaySearchScreen(
                         if (personRole.isNotBlank()) Text(personRole, style = MaterialTheme.typography.bodySmall, color = NuvioTheme.colors.TextSecondary)
                     }
                     AioPlaySectionCard(text = "Clear person", selected = false, onClick = {
-                        personName = ""; personRole = ""; personPhoto = ""; query = ""
+                        personName = ""; personRole = ""; personPhoto = ""; personCreditFilter = "all"; query = ""
                         onClearPerson()
                         runCatching { queryFocus.requestFocus() }
                     }, modifier = Modifier.width(132.dp))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val role = personRole.lowercase()
+                    val supported = buildList {
+                        add("all" to "All credits")
+                        if ("cast" in role || "actor" in role || "acting" in role) add("acting" to "Acting")
+                        if ("director" in role) add("directing" to "Directing")
+                        if ("writer" in role || "creator" in role) add("writing" to "Writing")
+                    }
+                    supported.forEach { (key, label) ->
+                        AioPlaySectionCard(
+                            text = label,
+                            selected = personCreditFilter == key,
+                            onClick = { personCreditFilter = key },
+                            modifier = Modifier.width(112.dp)
+                        )
+                    }
                 }
             }
 

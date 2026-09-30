@@ -609,7 +609,8 @@ class AioPlayViewModel @Inject constructor(
 
     suspend fun searchVod(
         query: String,
-        type: String? = null
+        type: String? = null,
+        peopleOnly: Boolean = false
     ): Result<List<AioPlayItem>> {
         val activeToken = token ?: return Result.failure(
             AioPlayApiException("Your session has expired.", 403)
@@ -618,7 +619,7 @@ class AioPlayViewModel @Inject constructor(
         val normalizedType = type
             ?.lowercase()
             ?.takeIf { it == "movie" || it == "series" }
-        val cacheKey = cleanQuery.lowercase() + "|" + normalizedType.orEmpty()
+        val cacheKey = cleanQuery.lowercase() + "|" + normalizedType.orEmpty() + "|" + peopleOnly
         val now = System.currentTimeMillis()
 
         synchronized(searchCache) {
@@ -631,7 +632,8 @@ class AioPlayViewModel @Inject constructor(
             api.searchVod(
                 token = activeToken,
                 query = cleanQuery,
-                type = normalizedType
+                type = normalizedType,
+                peopleOnly = peopleOnly
             )
         }.onSuccess { items ->
             synchronized(searchCache) {

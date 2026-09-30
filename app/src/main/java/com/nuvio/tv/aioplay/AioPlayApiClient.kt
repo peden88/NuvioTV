@@ -442,7 +442,7 @@ class AioPlayApiClient @Inject constructor(
             for (i in 0 until catalogs.length()) {
                 val catalog = catalogs.optJSONObject(i) ?: continue
                 val catalogName = catalog.optString("catalogName").ifBlank { catalog.optString("name") }
-                if (!Regex("people\\\\s*search", RegexOption.IGNORE_CASE).containsMatchIn(catalogName)) continue
+                if (!catalogName.lowercase().contains("people search")) continue
                 val rows = catalog.optJSONArray("metas") ?: continue
                 for (j in 0 until rows.length()) {
                     val item = parseItem(rows.optJSONObject(j), catalog.optString("type")) ?: continue

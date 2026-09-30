@@ -1161,7 +1161,7 @@ private fun AioPlaySearchScreen(
                             color = NuvioTheme.colors.TextSecondary
                         )
                     } else if (loading) {
-                        AioPlayCatalogSkeleton(posterMode = true)
+                        AioPlaySearchSkeleton()
                     }
                 }
             } else {
@@ -1177,9 +1177,8 @@ private fun AioPlaySearchScreen(
                     val columnSpacing = 9.dp
                     val rowHeight = (maxHeight - rowSpacing) / 2
                     val cardWidth = (maxWidth - (columnSpacing * (columns - 1))) / columns
-                    val titleSpace = 24.dp
-                    val posterHeight = minOf(cardWidth * 1.5f, (rowHeight - titleSpace).coerceAtLeast(72.dp))
-                    val searchCardHeight = rowHeight
+                    val posterHeight = cardWidth * 1.5f
+                    val searchCardHeight = posterHeight + 24.dp
 
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -2349,8 +2348,8 @@ private fun AioPlaySectionCard(
                     fontSize = 11.sp,
                     lineHeight = 13.sp
                 ),
-                color = Color.White,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                color = if (isFocused) Color(0xFF11161C) else Color.White,
+                fontWeight = if (selected || isFocused) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1
             )
         }
@@ -2725,6 +2724,29 @@ private fun AioPlayMiniBadge(
             fontWeight = FontWeight.SemiBold,
             maxLines = 1
         )
+    }
+}
+
+@Composable
+private fun AioPlaySearchSkeleton() {
+    val pulse by rememberInfiniteTransition(label = "AIOPlay search loading pulse").animateFloat(
+        initialValue = 0.24f, targetValue = 0.46f,
+        animationSpec = infiniteRepeatable(animation = tween(850), repeatMode = RepeatMode.Reverse),
+        label = "AIOPlay search loading alpha"
+    )
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val columns = 6
+        val gap = 9.dp
+        val cardWidth = (maxWidth - gap * (columns - 1)) / columns
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            repeat(columns) {
+                Column(Modifier.weight(1f)) {
+                    Box(Modifier.fillMaxWidth().height(cardWidth * 1.5f).clip(RoundedCornerShape(10.dp)).background(Color.White.copy(alpha = pulse)))
+                    Spacer(Modifier.height(5.dp))
+                    Box(Modifier.fillMaxWidth(.66f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color.White.copy(alpha = pulse * .72f)))
+                }
+            }
+        }
     }
 }
 
@@ -3322,7 +3344,7 @@ private fun AioPlayCollectionFolderCard(
     val artwork = if (focused && folder.focusGifEnabled && !folder.focusGifUrl.isNullOrBlank()) folder.focusGifUrl else folder.coverImageUrl ?: folder.heroBackdropUrl
     Card(
         onClick=onClick,
-        modifier=modifier.width(if(landscape) 250.dp else 142.dp).height(if(landscape) 142.dp else 210.dp).onFocusChanged { state -> focused=state.isFocused; if(state.isFocused) onFocused() },
+        modifier=modifier.width(if(landscape) 100.dp else 57.dp).height(if(landscape) 57.dp else 84.dp).onFocusChanged { state -> focused=state.isFocused; if(state.isFocused) onFocused() },
         shape=CardDefaults.shape(RoundedCornerShape(12.dp))
     ) {
         Box(Modifier.fillMaxSize()) {

@@ -464,11 +464,23 @@ private fun AioPlaySignedInApp(
             val restoreResultToken by entry.savedStateHandle
                 .getStateFlow("aioplay_search_restore_focus_token", 0)
                 .collectAsState()
+            val searchPersonName by entry.savedStateHandle
+                .getStateFlow("aioplay_search_person_name", "")
+                .collectAsState()
+            val searchPersonRole by entry.savedStateHandle
+                .getStateFlow("aioplay_search_person_role", "")
+                .collectAsState()
 
             AioPlaySearchScreen(
                 viewModel = viewModel,
                 restoreResultId = restoreResultId.takeIf { it.isNotBlank() },
                 restoreResultToken = restoreResultToken,
+                initialPersonName = searchPersonName,
+                initialPersonRole = searchPersonRole,
+                onPersonContextConsumed = {
+                    entry.savedStateHandle["aioplay_search_person_name"] = ""
+                    entry.savedStateHandle["aioplay_search_person_role"] = ""
+                },
                 onResult = { item ->
                     entry.savedStateHandle["aioplay_search_last_opened_item_id"] = item.id
                     navController.navigate(detailRoute(item))
@@ -559,7 +571,12 @@ private fun AioPlaySignedInApp(
                 restoreEpisodeId = restoreEpisodeId.takeIf { it.isNotBlank() },
                 restoreEpisodeSeason = restoreEpisodeSeason.takeIf { it >= 0 },
                 restoreEpisodeFocusToken = restoreEpisodeFocusToken,
-                restoreHeroFocusToken = restoreHeroFocusToken
+                restoreHeroFocusToken = restoreHeroFocusToken,
+                onSearchPerson = { name, role ->
+                    navController.getBackStackEntry(SEARCH_ROUTE).savedStateHandle["aioplay_search_person_name"] = name
+                    navController.getBackStackEntry(SEARCH_ROUTE).savedStateHandle["aioplay_search_person_role"] = role
+                    navController.popBackStack(SEARCH_ROUTE, inclusive = false)
+                }
             )
         }
 
@@ -883,6 +900,9 @@ private fun AioPlaySearchScreen(
     viewModel: AioPlayViewModel,
     restoreResultId: String?,
     restoreResultToken: Int,
+    initialPersonName: String,
+    initialPersonRole: String,
+    onPersonContextConsumed: () -> Unit,
     onResult: (AioPlayItem) -> Unit,
     onSection: (AioPlaySection) -> Unit,
     onSettings: () -> Unit,
@@ -892,8 +912,8 @@ private fun AioPlaySearchScreen(
 
     var query by rememberSaveable { mutableStateOf("") }
     var selectedType by rememberSaveable { mutableStateOf("all") }
-    var personName by rememberSaveable { mutableStateOf("") }
-    var personRole by rememberSaveable { mutableStateOf("") }
+    var personName by rememberSaveable { mutableStateOf(initialPersonName) }
+    var personRole by rememberSaveable { mutableStateOf(initialPersonRole) }
     var results by remember { mutableStateOf<List<AioPlayItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -906,6 +926,16 @@ private fun AioPlaySearchScreen(
     val resultFocusRequesters = remember(results.map { it.type + "|" + it.id }) {
         results.associate { item ->
             (item.type + "|" + item.id) to FocusRequester()
+        }
+    }
+
+    LaunchedEffect(initialPersonName, initialPersonRole) {
+        if (initialPersonName.isNotBlank()) {
+            personName = initialPersonName
+            personRole = initialPersonRole
+            query = initialPersonName
+            selectedType = "all"
+            onPersonContextConsumed()
         }
     }
 

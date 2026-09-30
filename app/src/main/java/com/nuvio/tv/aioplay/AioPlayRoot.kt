@@ -489,7 +489,7 @@ private fun AioPlaySignedInApp(
                 initialPersonPhoto = searchPersonPhoto,
                 onClearPerson = {
                     if (originType.isNotBlank() && originId.isNotBlank()) {
-                        navController.navigate(detailRoute(AioPlayItem(id = originId, type = originType, name = originId)))
+                        navController.navigate(detailRoute(AioPlayItem(id = originId, type = originType, name = originId, description = null, poster = null, background = null, logo = null)))
                     }
                     entry.savedStateHandle["aioplay_search_origin_type"] = ""
                     entry.savedStateHandle["aioplay_search_origin_id"] = ""

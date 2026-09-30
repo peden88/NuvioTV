@@ -470,6 +470,15 @@ private fun AioPlaySignedInApp(
             val searchPersonRole by entry.savedStateHandle
                 .getStateFlow("aioplay_search_person_role", "")
                 .collectAsState()
+            val searchPersonPhoto by entry.savedStateHandle
+                .getStateFlow("aioplay_search_person_photo", "")
+                .collectAsState()
+            val originType by entry.savedStateHandle
+                .getStateFlow("aioplay_search_origin_type", "")
+                .collectAsState()
+            val originId by entry.savedStateHandle
+                .getStateFlow("aioplay_search_origin_id", "")
+                .collectAsState()
 
             AioPlaySearchScreen(
                 viewModel = viewModel,
@@ -477,9 +486,18 @@ private fun AioPlaySignedInApp(
                 restoreResultToken = restoreResultToken,
                 initialPersonName = searchPersonName,
                 initialPersonRole = searchPersonRole,
+                initialPersonPhoto = searchPersonPhoto,
+                onClearPerson = {
+                    if (originType.isNotBlank() && originId.isNotBlank()) {
+                        navController.navigate(detailRoute(AioPlayItem(id = originId, type = originType, name = originId)))
+                    }
+                    entry.savedStateHandle["aioplay_search_origin_type"] = ""
+                    entry.savedStateHandle["aioplay_search_origin_id"] = ""
+                },
                 onPersonContextConsumed = {
                     entry.savedStateHandle["aioplay_search_person_name"] = ""
                     entry.savedStateHandle["aioplay_search_person_role"] = ""
+                    entry.savedStateHandle["aioplay_search_person_photo"] = ""
                 },
                 onResult = { item ->
                     entry.savedStateHandle["aioplay_search_last_opened_item_id"] = item.id
@@ -572,12 +590,15 @@ private fun AioPlaySignedInApp(
                 restoreEpisodeSeason = restoreEpisodeSeason.takeIf { it >= 0 },
                 restoreEpisodeFocusToken = restoreEpisodeFocusToken,
                 restoreHeroFocusToken = restoreHeroFocusToken,
-                onSearchPerson = { name, role ->
+                onSearchPerson = { name, role, photo ->
                     val returnedToSearch = navController.popBackStack(SEARCH_ROUTE, inclusive = false)
                     if (!returnedToSearch) navController.navigate(SEARCH_ROUTE)
                     navController.currentBackStackEntry?.savedStateHandle?.let { searchState ->
                         searchState["aioplay_search_person_name"] = name
                         searchState["aioplay_search_person_role"] = role
+                        searchState["aioplay_search_person_photo"] = photo.orEmpty()
+                        searchState["aioplay_search_origin_type"] = preview.type
+                        searchState["aioplay_search_origin_id"] = preview.id
                     }
                 }
             )
@@ -905,6 +926,8 @@ private fun AioPlaySearchScreen(
     restoreResultToken: Int,
     initialPersonName: String,
     initialPersonRole: String,
+    initialPersonPhoto: String,
+    onClearPerson: () -> Unit,
     onPersonContextConsumed: () -> Unit,
     onResult: (AioPlayItem) -> Unit,
     onSection: (AioPlaySection) -> Unit,
@@ -917,6 +940,7 @@ private fun AioPlaySearchScreen(
     var selectedType by rememberSaveable { mutableStateOf("all") }
     var personName by rememberSaveable { mutableStateOf(initialPersonName) }
     var personRole by rememberSaveable { mutableStateOf(initialPersonRole) }
+    var personPhoto by rememberSaveable { mutableStateOf(initialPersonPhoto) }
     var results by remember { mutableStateOf<List<AioPlayItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -932,10 +956,11 @@ private fun AioPlaySearchScreen(
         }
     }
 
-    LaunchedEffect(initialPersonName, initialPersonRole) {
+    LaunchedEffect(initialPersonName, initialPersonRole, initialPersonPhoto) {
         if (initialPersonName.isNotBlank()) {
             personName = initialPersonName
             personRole = initialPersonRole
+            personPhoto = initialPersonPhoto
             query = initialPersonName
             selectedType = "all"
             onPersonContextConsumed()
@@ -1097,6 +1122,7 @@ private fun AioPlaySearchScreen(
                         if (personName.isNotBlank() && value.trim() != personName) {
                             personName = ""
                             personRole = ""
+                            personPhoto = ""
                         }
                     },
                     placeholder = if (personName.isNotBlank()) "Titles featuring $personName" else "Search all titles",
@@ -1152,12 +1178,18 @@ private fun AioPlaySearchScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    if (personPhoto.isNotBlank()) {
+                        AsyncImage(model = personPhoto, contentDescription = personName,
+                            modifier = Modifier.width(46.dp).height(62.dp).clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop)
+                    }
                     Column(Modifier.weight(1f)) {
                         Text(personName, color = NuvioTheme.colors.TextPrimary, fontWeight = FontWeight.SemiBold)
                         if (personRole.isNotBlank()) Text(personRole, style = MaterialTheme.typography.bodySmall, color = NuvioTheme.colors.TextSecondary)
                     }
                     AioPlaySectionCard(text = "Clear person", selected = false, onClick = {
-                        personName = ""; personRole = ""; query = ""
+                        personName = ""; personRole = ""; personPhoto = ""; query = ""
+                        onClearPerson()
                         runCatching { queryFocus.requestFocus() }
                     }, modifier = Modifier.width(132.dp))
                 }

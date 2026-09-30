@@ -573,9 +573,12 @@ private fun AioPlaySignedInApp(
                 restoreEpisodeFocusToken = restoreEpisodeFocusToken,
                 restoreHeroFocusToken = restoreHeroFocusToken,
                 onSearchPerson = { name, role ->
-                    navController.getBackStackEntry(SEARCH_ROUTE).savedStateHandle["aioplay_search_person_name"] = name
-                    navController.getBackStackEntry(SEARCH_ROUTE).savedStateHandle["aioplay_search_person_role"] = role
-                    navController.popBackStack(SEARCH_ROUTE, inclusive = false)
+                    val returnedToSearch = navController.popBackStack(SEARCH_ROUTE, inclusive = false)
+                    if (!returnedToSearch) navController.navigate(SEARCH_ROUTE)
+                    navController.currentBackStackEntry?.savedStateHandle?.let { searchState ->
+                        searchState["aioplay_search_person_name"] = name
+                        searchState["aioplay_search_person_role"] = role
+                    }
                 }
             )
         }
@@ -1234,6 +1237,8 @@ private fun AioPlaySearchScreen(
                     val cardWidth = (maxWidth - (columnSpacing * (columns - 1))) / columns
                     val posterHeight = cardWidth * 1.5f
                     val searchCardHeight = posterHeight + 24.dp
+                    // Keep both complete 2:3 poster rows inside the available search viewport.
+                    val fittedPosterHeight = minOf(posterHeight, (rowHeight - 24.dp).coerceAtLeast(48.dp))
 
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -1255,7 +1260,7 @@ private fun AioPlaySearchScreen(
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(searchCardHeight),
+                                            .height(fittedPosterHeight + 24.dp),
                                         contentAlignment = Alignment.TopCenter
                                     ) {
                                         if (item != null) {
@@ -1265,7 +1270,7 @@ private fun AioPlaySearchScreen(
                                                 item = item,
                                                 section = AioPlaySection.VOD,
                                                 posterMode = true,
-                                                posterCardHeight = posterHeight,
+                                                posterCardHeight = fittedPosterHeight,
                                                 onClick = { onResult(item) },
                                                 modifier = Modifier
                                                     .then(

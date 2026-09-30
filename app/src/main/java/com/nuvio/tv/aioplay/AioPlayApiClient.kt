@@ -334,9 +334,22 @@ class AioPlayApiClient @Inject constructor(
                         add(AioPlayCollectionFolder(
                             id = id,
                             name = folder.optString("name").ifBlank { "Collection" },
-                            coverImageUrl = resolveCollectionAssetUrl(folder.optString("coverImageUrl")),
-                            heroBackdropUrl = resolveCollectionAssetUrl(folder.optString("heroBackdropUrl")),
-                            focusGifUrl = resolveCollectionAssetUrl(folder.optString("focusGifUrl")),
+                            coverImageUrl = resolveCollectionAssetUrl(
+                                folder.optNonBlankString("coverImageUrl")
+                                    ?: folder.optNonBlankString("coverImage")
+                                    ?: folder.optNonBlankString("poster")
+                                    ?: folder.optNonBlankString("image")
+                                    ?: folder.optNonBlankString("cover")
+                            ),
+                            heroBackdropUrl = resolveCollectionAssetUrl(
+                                folder.optNonBlankString("heroBackdropUrl")
+                                    ?: folder.optNonBlankString("heroBackdrop")
+                                    ?: folder.optNonBlankString("backdrop")
+                            ),
+                            focusGifUrl = resolveCollectionAssetUrl(
+                                folder.optNonBlankString("focusGifUrl")
+                                    ?: folder.optNonBlankString("focusGif")
+                            ),
                             focusGifEnabled = folder.optBoolean("focusGifEnabled", false),
                             tileShape = folder.optString("tileShape", "POSTER"),
                             hideTitle = folder.optBoolean("hideTitle", false)

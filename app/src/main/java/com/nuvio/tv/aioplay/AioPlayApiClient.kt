@@ -421,7 +421,8 @@ class AioPlayApiClient @Inject constructor(
     suspend fun searchVod(
         token: String,
         query: String,
-        type: String? = null
+        type: String? = null,
+        peopleOnly: Boolean = false
     ): List<AioPlayItem> {
         val cleanQuery = query.trim()
         if (cleanQuery.isBlank()) return emptyList()
@@ -434,7 +435,21 @@ class AioPlayApiClient @Inject constructor(
             }
         }
         val json = requestJson("/api/v1/vod/search$suffix", token = token)
-        return parseItems(json, type.orEmpty())
+        if (!peopleOnly) return parseItems(json, type.orEmpty())
+        val catalogs = json.optJSONArray("catalogs") ?: return emptyList()
+        return buildList {
+            val seen = mutableSetOf<String>()
+            for (i in 0 until catalogs.length()) {
+                val catalog = catalogs.optJSONObject(i) ?: continue
+                val catalogName = catalog.optString("catalogName").ifBlank { catalog.optString("name") }
+                if (!Regex("people\\\\s*search", RegexOption.IGNORE_CASE).containsMatchIn(catalogName)) continue
+                val rows = catalog.optJSONArray("metas") ?: continue
+                for (j in 0 until rows.length()) {
+                    val item = parseItem(rows.optJSONObject(j), catalog.optString("type")) ?: continue
+                    if (seen.add(item.type + "|" + item.id)) add(item)
+                }
+            }
+        }
     }
 
     suspend fun vodMeta(

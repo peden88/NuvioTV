@@ -645,11 +645,11 @@ class AioPlayViewModel @Inject constructor(
         }
     }
 
-    suspend fun personCredits(personId: Long): Result<List<AioPlayItem>> {
+    suspend fun personCredits(personId: Long, personName: String): Result<List<AioPlayItem>> {
         val activeToken = token ?: return Result.failure(
             AioPlayApiException("Your session has expired.", 403)
         )
-        return runCatching { api.personCredits(activeToken, personId) }
+        return runCatching { api.personCredits(activeToken, personId, personName) }
     }
 
     suspend fun loadVodMeta(type: String, id: String): Result<AioPlayMetaDetails> {

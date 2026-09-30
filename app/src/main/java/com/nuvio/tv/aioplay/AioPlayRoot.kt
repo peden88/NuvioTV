@@ -986,9 +986,12 @@ private fun AioPlaySearchScreen(
             return@LaunchedEffect
         }
 
-        delay(320)
         loading = true
         error = null
+        results = emptyList()
+        heroItem = null
+        pendingHeroItem = null
+        delay(320)
         val type = if (personName.isNotBlank()) null else selectedType.takeIf { it == "movie" || it == "series" }
         viewModel.searchVod(clean, type, peopleOnly = personName.isNotBlank())
             .onSuccess { rows ->
@@ -1004,6 +1007,9 @@ private fun AioPlaySearchScreen(
                 pendingHeroItem = results.firstOrNull()
             }
             .onFailure { throwable ->
+                results = emptyList()
+                pendingHeroItem = null
+                heroItem = null
                 error = throwable.message ?: "Search is unavailable right now."
             }
         loading = false
@@ -1136,7 +1142,7 @@ private fun AioPlaySearchScreen(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                Column(
+                if (personName.isBlank()) Column(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

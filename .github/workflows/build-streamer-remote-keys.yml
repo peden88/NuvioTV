@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,3 +50,19 @@ jobs:
           name: StreamerRemoteKeys-v0.1-test-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Prepare permanent APK download
+        shell: bash
+        run: cp app/build/outputs/apk/debug/app-debug.apk StreamerRemoteKeys-v0.1-test.apk
+      - name: Publish APK as public GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create streamer-remote-keys-v0.1-test \
+            StreamerRemoteKeys-v0.1-test.apk \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --prerelease \
+            --title "Streamer Remote Keys v0.1 (Experimental)" \
+            --notes "Experimental Google TV Streamer keyboard shortcut APK. YouTube button: Space; Netflix button: case toggle. Device-side accessibility interception not yet confirmed on all firmware. Install only for testing."

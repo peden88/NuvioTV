@@ -1,28 +1,52 @@
 name: Build Streamer Remote Keys APK
 on:
+  workflow_dispatch:
   push:
     branches: [experiments/streamer-remote-keys-apk]
-  workflow_dispatch:
+    paths:
+      - 'source.tar.xz.b64'
+      - '.github/workflows/build-streamer-remote-keys.yml'
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: experiments/streamer-remote-keys-apk
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      # GitHub's ubuntu-latest Android SDK already has command-line tools.
+      # setup-android@v3 tries to install removed SDK package 'tools' and fails.
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -n "$SDKMANAGER" || { echo 'sdkmanager was not found'; exit 1; }
+          "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-      - name: Extract isolated Android app sources
-        run: base64 --decode source.tar.xz.b64 | tar -xJf -
-      - name: Install Android 35 SDK
-        run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Extract isolated Android application sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode source.tar.xz.b64 | tar -xJf -
+          test -f app/build.gradle
+          test -f app/src/main/AndroidManifest.xml
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
-      - uses: actions/upload-artifact@v4
+      - name: Upload test APK
+        if: success()
+        uses: actions/upload-artifact@v4
         with:
           name: StreamerRemoteKeys-v0.1-test-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

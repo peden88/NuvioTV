@@ -1,5 +1,7 @@
 package com.nuvio.tv.ui.screens.player
 
+import com.nuvio.tv.BuildConfig
+
 import android.util.Log
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -13,6 +15,7 @@ import kotlinx.coroutines.launch
 private const val MAX_STARTUP_AUTO_RETRIES = 2
 private const val MAX_AUTO_RETRIES = 2
 private const val MAX_DEAD_SOURCE_FAILOVERS = 3
+private const val AIOPLAY_FAILOVER_REWIND_MS = 2_000L
 
 // nt6 fix B: ceiling on TOTAL automatic recoveries for one stream URL, across
 // every fallback ladder combined (DV modes, safe audio, PCM, timeout, NPE, 416,
@@ -711,6 +714,14 @@ internal fun PlayerRuntimeController.attemptDeadSourceFailover(
  * of options (cap reached or no live sources left) so the caller surfaces the
  * error screen.
  */
+private fun com.nuvio.tv.domain.model.Stream.aioplayFailoverKey(): String {
+    val hash = infoHash ?: clientResolve?.infoHash
+    if (!hash.isNullOrBlank()) return "$addonName|hash:${hash.lowercase()}|file:${fileIdx ?: clientResolve?.fileIdx ?: -1}"
+    val url = getStreamUrl()
+    if (!url.isNullOrBlank()) return "$addonName|url:$url"
+    return "$addonName|meta:${name.orEmpty()}|${title.orEmpty()}|${description.orEmpty().hashCode()}"
+}
+
 internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: String): Boolean {
     // Mark dead: both the resolved playback URL and, where identifiable, the
     // original list entry (debrid resolution can make these differ) so the
@@ -727,11 +738,14 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
         currentStreamName = state.currentStreamName
     )
     if (currentIdx >= 0) {
-        streams.getOrNull(currentIdx)?.getStreamUrl()?.let { deadSourceStreamUrls.add(it) }
+        streams.getOrNull(currentIdx)?.let { failed ->
+            failed.getStreamUrl()?.let { deadSourceStreamUrls.add(it) }
+            if (BuildConfig.AIOPLAY_MODE) deadSourceStreamKeys.add(failed.aioplayFailoverKey())
+        }
     }
     _uiState.update { it.copy(deadSourceStreamUrls = deadSourceStreamUrls.toSet()) }
 
-    if (deadSourceFailoverCount >= MAX_DEAD_SOURCE_FAILOVERS) {
+    if (!BuildConfig.AIOPLAY_MODE && deadSourceFailoverCount >= MAX_DEAD_SOURCE_FAILOVERS) {
         Log.w(
             PlayerRuntimeController.TAG,
             "Dead-source failover cap ($MAX_DEAD_SOURCE_FAILOVERS) reached; surfacing error"
@@ -745,8 +759,31 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
         .map { streams[it] }
         .firstOrNull { candidate ->
             val url = candidate.getStreamUrl()
-            url == null || !deadSourceStreamUrls.contains(url)
+            val urlAlive = url == null || !deadSourceStreamUrls.contains(url)
+            val identityAlive = !BuildConfig.AIOPLAY_MODE || !deadSourceStreamKeys.contains(candidate.aioplayFailoverKey())
+            urlAlive && identityAlive
         } ?: run {
+        if (BuildConfig.AIOPLAY_MODE && !aioPlayExhaustionRefreshAttempted) {
+            aioPlayExhaustionRefreshAttempted = true
+            Log.w(PlayerRuntimeController.TAG, "AIOPlay source list exhausted; refreshing AIOStreams once")
+            scope.launch {
+                _uiState.update {
+                    it.copy(
+                        error = null,
+                        showPauseOverlay = false,
+                        showLoadingOverlay = it.loadingOverlayEnabled,
+                        loadingMessage = "Refreshing AIOStreams…"
+                    )
+                }
+                loadSourceStreams(forceRefresh = true)
+                sourceStreamsJob?.join()
+                val recovered = advanceToNextLiveSource(detailedError)
+                if (!recovered) {
+                    _uiState.update { it.copy(error = detailedError, isBuffering = false) }
+                }
+            }
+            return true
+        }
         Log.w(PlayerRuntimeController.TAG, "Dead source and no live sources after index $currentIdx; surfacing error")
         return false
     }
@@ -759,6 +796,10 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
                 "host=${next.getStreamUrl()?.safeHost()}"
     )
     val savedPosition = _exoPlayer?.currentPosition?.takeIf { it > 0L } ?: 0L
+    if (BuildConfig.AIOPLAY_MODE) pendingAioPlayFailoverPaused = _exoPlayer?.playWhenReady == false
+    val resumePosition = if (BuildConfig.AIOPLAY_MODE && savedPosition > 0L) {
+        (savedPosition - AIOPLAY_FAILOVER_REWIND_MS).coerceAtLeast(0L)
+    } else savedPosition
     errorRetryJob?.cancel()
     scope.launch {
         _uiState.update {
@@ -769,9 +810,9 @@ internal fun PlayerRuntimeController.advanceToNextLiveSource(detailedError: Stri
                 loadingMessage = context.getString(
                     com.nuvio.tv.R.string.player_dead_source_failover,
                     attemptNo,
-                    MAX_DEAD_SOURCE_FAILOVERS
+                    if (BuildConfig.AIOPLAY_MODE) streams.size.coerceAtLeast(attemptNo) else MAX_DEAD_SOURCE_FAILOVERS
                 ),
-                pendingSeekPosition = if (savedPosition > 0L) savedPosition else it.pendingSeekPosition
+                pendingSeekPosition = if (resumePosition > 0L) resumePosition else it.pendingSeekPosition
             )
         }
         switchToSourceStream(next)

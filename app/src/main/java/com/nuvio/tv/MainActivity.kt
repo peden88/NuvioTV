@@ -128,6 +128,7 @@ import androidx.tv.material3.rememberDrawerState
 import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import com.nuvio.tv.R
+import com.nuvio.tv.aioplay.AioPlayRoot
 import com.nuvio.tv.core.auth.AuthManager
 import com.nuvio.tv.core.auth.DeviceSessionRegistration
 import com.nuvio.tv.core.deeplink.DeepLinkHandler
@@ -383,6 +384,11 @@ class MainActivity : ComponentActivity() {
         captureDeepLinkIntent(intent)
 
         setContent {
+            if (BuildConfig.AIOPLAY_MODE) {
+                AioPlayRoot(onExit = { finish() })
+                return@setContent
+            }
+
             var hasSelectedProfileThisSession by rememberSaveable { mutableStateOf(false) }
             var onboardingCompletedThisSession by remember { mutableStateOf(false) }
             var onboardingProfileSyncInProgress by remember { mutableStateOf(false) }

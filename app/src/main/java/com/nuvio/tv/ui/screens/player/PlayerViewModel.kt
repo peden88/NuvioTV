@@ -1183,6 +1183,9 @@ class PlayerViewModel @Inject constructor(
         controller.onEvent(event)
     }
 
+    fun tryNextAioPlaySource(): Boolean =
+        controller.advanceToNextLiveSource("Manual source switch")
+
     fun bindExoSubtitleView(subtitleView: androidx.media3.ui.SubtitleView?) {
         controller.bindExoSubtitleView(subtitleView)
     }

@@ -1214,6 +1214,42 @@ class PlayerSettingsDataStore @Inject constructor(
 
     // Player preference setter
 
+    /**
+     * AIOPlay installation defaults.
+     *
+     * This only fills preferences that have never been explicitly written for
+     * the active profile, so subsequent user changes always win.
+     */
+    suspend fun applyAioPlayDefaultsIfUnset() {
+        store().edit { prefs ->
+            if (prefs[internalPlayerEngineKey] == null) {
+                prefs[internalPlayerEngineKey] = InternalPlayerEngine.AUTO.name
+            }
+            if (prefs[skipIntroEnabledKey] == null) {
+                prefs[skipIntroEnabledKey] = true
+            }
+            if (prefs[autoSkipSegmentTypesKey] == null) {
+                prefs[autoSkipSegmentTypesKey] =
+                    AutoSkipSegmentType.values().map { it.storedValue }.toSet()
+            }
+            if (prefs[pauseOverlayEnabledKey] == null) {
+                prefs[pauseOverlayEnabledKey] = true
+            }
+            if (prefs[parentalGuideEnabledKey] == null) {
+                prefs[parentalGuideEnabledKey] = true
+            }
+            if (prefs[streamAutoPlayModeKey] == null) {
+                prefs[streamAutoPlayModeKey] = StreamAutoPlayMode.FIRST_STREAM.name
+            }
+            if (prefs[streamAutoPlayNextEpisodeEnabledKey] == null) {
+                prefs[streamAutoPlayNextEpisodeEnabledKey] = true
+            }
+            if (prefs[showPlayerLoadingStatusKey] == null) {
+                prefs[showPlayerLoadingStatusKey] = false
+            }
+        }
+    }
+
     suspend fun setPlayerPreference(preference: PlayerPreference) {
         store().edit { prefs ->
             prefs[playerPreferenceKey] = preference.name

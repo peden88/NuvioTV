@@ -44,11 +44,12 @@ internal fun InputField(
     isPassword: Boolean = false,
     imeAction: ImeAction = ImeAction.Done,
     onImeAction: () -> Unit = {},
+    startEditing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val textFieldFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
-    var isEditing by remember { mutableStateOf(false) }
+    var isEditing by remember { mutableStateOf(startEditing) }
 
     LaunchedEffect(isEditing) {
         if (isEditing) {
